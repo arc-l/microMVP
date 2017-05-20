@@ -1,0 +1,26 @@
+planPathsAdvancedSplitNoCycle
+splitPaths(random?)
+hasCycles
+
+If has cycle, tri many times to see if can get some path without cycle.
+
+
+main::solveProblemSuboptimalwithCluster done
+{
+	planPathsAdvancedSplitNoCycleWithCluster(pathplanner) done
+	multiThreadedSplitPlanningWithCluster(Pathplanner)
+}
+
+pathplanner::
+{
+	splitpathsWithCluster done
+	planpathadvancedwithcluster done
+
+	multiThreadedSplitPlanningWithCluster(Pathplanner) :: createthread
+}
+
+MultiagentGraphSolverGurobiTime
+{
+	solveWithCluster
+	prepareModel
+}
