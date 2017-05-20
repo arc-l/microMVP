@@ -4,12 +4,17 @@ microMVP software platform
 Packages Needed for Pure Simulation:
 
 pygame:		> pip install pygame
+
 pyserial: 	> pip install pyserial
+
 zmq: 		> pip install pyzmq
+
 pgu:		https://github.com/parogers/pgu
+
 munkres:	http://software.clapper.org/munkres/
 
 Try to test if pure simulation works:
+
 	> python gui.py -s
 
 The next step is to control the hardware.
@@ -17,12 +22,19 @@ Get chilitag source file from https://github.com/chili-epfl/chilitags.
 Find and replace detect-live.cpp with the file in our directory chilitags/detect-live.cpp
 Build chilitag, now you can use the generated detect-live executable to detect the tags on the cars.
 From commandline, run:
+
 	> detect-live.exe 0 5556
+	
 	(replace 0 with the camera you want to use if you have multiple cameras)
+	
 Setup your own parameters for the cars:
+
 	open utils.py and modify the parameters:
+	
 		carInfo, zmqPublisherIP, xBeeSocket, tagRatio
+		
 Try to test if hardware control works:
+
 	> python gui.py
 
 --------------------------------------------------------
@@ -30,12 +42,17 @@ Try to test if hardware control works:
 
 To run rvo2, first get the binaries from http://gamma.cs.unc.edu/RVO2/downloads/,
 then build it with the file in our directory: rvo2/RvoCaller.cpp.
+
 This generates an executable, rename it as RvoCaller.exe and place it in 
+
 	python\algorithms\rvobin
 
 To run the MRPP path planning solver, you need to install Java and Gurobi on your computer:
+
 	http://www.oracle.com/technetwork/java/javase/downloads
+	
 	http://www.gurobi.com/
+	
 	And make sure gurobi is linked to your java.
 
 You can also design your own robot dance patterns or path planning algorithms, 
