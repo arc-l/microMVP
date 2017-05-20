@@ -1,17 +1,23 @@
-# microMVP
+ # microMVP
 microMVP software platform
 
 Packages Needed for Pure Simulation:
 
-pygame:		> pip install pygame
+pygame:	
 
-pyserial: 	> pip install pyserial
+	> pip install pygame
 
-zmq: 		> pip install pyzmq
+pyserial: 	
 
-pgu:		https://github.com/parogers/pgu
+	> pip install pyserial
 
-munkres:	http://software.clapper.org/munkres/
+zmq: 		
+
+	> pip install pyzmq
+
+pgu:	https://github.com/parogers/pgu
+
+munkres:http://software.clapper.org/munkres/
 
 Try to test if pure simulation works:
 
