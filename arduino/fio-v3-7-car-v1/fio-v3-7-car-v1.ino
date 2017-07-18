@@ -58,8 +58,8 @@ void setup()
 int delayMS = 10;
 
 // Read buffer, head is 'C', tail is 'M'
-int bufferSize =16;
-byte readBuffer[16];
+int bufferSize =22;
+byte readBuffer[22];
 
 // Global loop counter
 int loopCount = 0;
