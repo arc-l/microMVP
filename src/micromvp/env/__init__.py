@@ -8,7 +8,16 @@ Provides environment interfaces for robot control:
 """
 
 from .base import Environment
+from .real_new_navigation_env import RealNewNavigationConfig, RealNewNavigationEnv
 from .sim_env import SimConfig, SimEnv
 from .real_push_env import RealPushEnv, RealPushConfig
 
-__all__ = ["Environment", "SimConfig", "SimEnv", "RealPushEnv", "RealPushConfig"]
+__all__ = [
+    "Environment",
+    "SimConfig",
+    "SimEnv",
+    "RealPushEnv",
+    "RealPushConfig",
+    "RealNewNavigationEnv",
+    "RealNewNavigationConfig",
+]
