@@ -40,9 +40,11 @@ class TestPackageLevelExports:
         mod = importlib.import_module("micromvp.env.new_real_push_env.serial_action")
         assert not hasattr(mod, "APStatusInfo")
 
-    def test_env_level_init_does_not_export_new_real_push_env(self):
-        """NewRealPushEnv is experimental, should not be in env/__init__."""
+    def test_env_level_init_exports_new_real_push_env(self):
+        """NewRealPushEnv should be accessible from env/__init__."""
         import micromvp.env as env_pkg
 
+        assert hasattr(env_pkg, "NewRealPushEnv")
+        assert hasattr(env_pkg, "NewRealPushConfig")
         if hasattr(env_pkg, "__all__"):
-            assert "NewRealPushEnv" not in env_pkg.__all__
+            assert "NewRealPushEnv" in env_pkg.__all__

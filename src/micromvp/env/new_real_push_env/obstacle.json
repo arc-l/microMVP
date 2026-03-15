@@ -1,0 +1,13 @@
+{
+  "marker_size_mm": 30.0,
+  "markers": {
+    "0": {
+      "polygon_local": [[-2.0, -2.0], [2.0, -2.0], [2.0, 2.0], [-2.0, 2.0]],
+      "description": "4cm x 4cm square obstacle"
+    },
+    "1": {
+      "polygon_local": [[-2.0, -2.0], [2.0, -2.0], [2.0, 2.0], [-2.0, 2.0]],
+      "description": "4cm x 4cm square obstacle"
+    }
+  }
+}

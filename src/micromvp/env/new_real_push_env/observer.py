@@ -325,8 +325,7 @@ class ArucoObserver:
         self._frame_callback = callback
 
     def is_workspace_ready(self) -> bool:
-        with self._workspace_lock:
-            return self._workspace.ready
+        return self._ws_lock_state.is_locked
 
     def get_workspace_estimate(self) -> WorkspaceEstimate:
         with self._workspace_lock:

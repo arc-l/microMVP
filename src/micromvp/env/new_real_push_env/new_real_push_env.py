@@ -18,6 +18,7 @@ from .serial_action import SerialActionConfig, SerialActionSender
 
 
 _DEFAULT_CALIB = os.path.join(os.path.dirname(__file__), "camera.yaml")
+_DEFAULT_OBSTACLE = os.path.join(os.path.dirname(__file__), "obstacle.json")
 
 
 @dataclass
@@ -59,7 +60,7 @@ class NewRealPushConfig:
     obstacle_dict: str = "DICT_5X5_50"
     obstacle_marker_size_mm: float = 30.0
     obstacle_marker_height_cm: float = 4.0
-    obstacle_marker_config_file: str = ""
+    obstacle_marker_config_file: str = _DEFAULT_OBSTACLE
 
     # Workspace estimation
     workspace_margin_cm: float = 1.0
