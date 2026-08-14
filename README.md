@@ -332,13 +332,39 @@ default), so that a car and an obstacle sharing an id stay distinguishable.
   SE(2) and so accounts for the robot's shape *and* heading. Needs the RVG
   extension built and importable.
 
-RVG is not vendored in this repo; it is a separate C++ project with Python
-bindings. Build it and make sure `import rvg` works, then set
-`planner.name: rvg`. If it is selected but not importable, the system warns
-once and falls back to straight lines.
+If `rvg` is selected but not importable, the system warns once at startup
+and falls back to straight lines.
 
-The RVG-dependent tests are excluded from the default run and need the
-plugin present:
+### Installing RVG
+
+RVG is not vendored here. It is a separate C++ project
+([arc-l/rvg](https://github.com/arc-l/rvg)) with Python bindings, and
+building it is a fair amount of work — budget half an hour, and note that
+its own README describes the macOS bindings as still under development.
+
+```bash
+git clone --recurse-submodules https://github.com/arc-l/rvg.git
+cd rvg
+
+# system libraries (Ubuntu; use the brew equivalents on macOS)
+sudo apt install libboost-all-dev libgmp-dev libmpfr-dev \
+                 libtinyxml2-dev libeigen3-dev
+
+conda activate micromvp     # build against the env you run MicroMVP in
+pip install -e .
+```
+
+Check it took:
+
+```bash
+python -c "from rvg import vertex, polygon, rvg; print('ok')"
+```
+
+Import it from a directory that is not the RVG checkout. A bare `rvg/`
+folder on the path imports as an empty namespace package, so plain
+`import rvg` can succeed while the real extension is missing.
+
+With it installed, the path-planning tests run:
 
 ```bash
 pytest -m rvg
