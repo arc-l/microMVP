@@ -2,7 +2,7 @@
 
 A multi-robot control framework for small differential-drive cars tracked by
 an overhead camera. Robots carry ArUco markers, an overhead camera works out
-where they are, and wheel commands go back over an ESP-NOW radio bridge.
+where they are, and wheel commands go back over an ESP-NOW link.
 
 The same controller code runs against simulation or real hardware, because
 control logic never talks to hardware directly — it goes through three
@@ -142,7 +142,7 @@ this path, rotate to that heading. One controller per robot.
 
 **Environment** is the world the robots act in. It changes as they move,
 and it gives you observations — where each robot is and which way it faces.
-`SimEnv` simulates it; `RealEnv` is a camera and a radio.
+`SimEnv` simulates it; `RealEnv` is the real one, seen through a camera.
 
 **Coordinator** is in charge overall. It takes the observations from the
 environment and hands each controller what it needs, and it handles
@@ -151,8 +151,8 @@ planning, deciding who goes where.
 
 ### Environment — reports poses, drives the wheels
 
-Owns the camera and the radio. It reports poses and accepts wheel commands,
-and knows nothing about goals or paths.
+Owns the camera and the link to the cars. It reports poses and accepts
+wheel commands, and knows nothing about goals or paths.
 
 ```python
 observations = env.observe()               # {car_id: RobotObservation(x, y, theta, t)}
@@ -446,7 +446,7 @@ vision system entirely. If the wheels still do not turn, the `CAR_ID` in
 the car's firmware does not match the id you are sending to.
 
 Note that ESP-NOW broadcasts are not acknowledged: the gateway reporting
-`send_ok` means the packet left the radio, not that any car heard it.
+`send_ok` means the gateway sent the packet, not that any car heard it.
 
 ### The web API will not start
 
