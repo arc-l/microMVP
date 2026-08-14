@@ -1,11 +1,16 @@
 """
 ArUco-based camera observer with adaptive workspace estimation.
 
-Instead of fixed workspace markers on the ground, the coordinate system is
-bootstrapped from car markers (4x4, 36mm, 4.8cm height) and obstacle markers
-(5x5, 30mm, 4.0cm height).  Their known physical heights let us estimate the
-ground plane; we then project the camera's field of view onto that plane and
-pick the largest axis-aligned inscribed rectangle as the workspace.
+There are no calibration markers on the ground. The coordinate system is
+bootstrapped from whatever markers are visible: each one's known physical
+height above the floor (car.marker_height_cm / obstacle.marker_height_cm)
+turns its pose into a ground-plane sample. We fit the plane from those,
+project the camera's field of view onto it, and take the largest
+axis-aligned inscribed rectangle as the workspace.
+
+Marker dictionaries, sizes and heights all come from the deployment YAML;
+getting them wrong scales every reported distance, so they are required
+fields rather than defaults.
 
 Workspace lock lifecycle:
     collecting  ->  stable  ->  locked
@@ -13,7 +18,7 @@ Candidates are accumulated for workspace_lock_frames consecutive ready frames.
 Only when the window is full AND all stability thresholds are met does the
 state transition to "locked".
 
-Threading contract (same as real_push_env.observer):
+Threading contract:
 - start(): safe from GUI main thread
 - _run_loop(): background thread, compute only, NO cv2 HighGUI
 - render(): MUST be called from GUI main thread
@@ -81,7 +86,7 @@ class ObserverConfig:
 
     # Preview
     no_preview: bool = False
-    preview_window_name: str = "NewRealPushObserver"
+    preview_window_name: str = "MicroMVP Observer"
     draw_axis: bool = True
     axis_length_m: float = 0.03
 
@@ -963,7 +968,7 @@ class ArucoObserver:
 
             # --- Position: transform 4 marker corners into camera frame,
             #     project onto locked workspace XY, average for center.
-            #     Same approach as real_push_env: uses fixed workspace axes
+            #     Uses fixed workspace axes
             #     so per-frame rvec noise does NOT get amplified. ---
             corners_cam = (R_64 @ self._car_marker_pts_m.T + tvec_64).T  # (4, 3)
             corners_xy = np.array(
@@ -1036,7 +1041,7 @@ class ArucoObserver:
             tvec_64 = marker.tvec.reshape(3, 1).astype(np.float64)
 
             # Transform each polygon vertex through the full 3D chain
-            # (marker-local → camera → workspace), same as real_push_env.
+            # (marker-local → camera → workspace).
             # This avoids decomposing into a heading angle, which caused a
             # 90-degree offset because polygon_local is defined in the
             # marker's own coordinate frame (X=right, Y=up).
@@ -1214,7 +1219,7 @@ class ArucoObserver:
 
         # Pre-compute marker corner points in marker-local frame (meters).
         # Used to transform PnP results into 4 camera-frame corners, matching
-        # the approach from real_push_env that averages 4 corners for position.
+        # averaging the 4 corners for a steadier position than tvec alone.
         self._car_marker_pts_m = self._marker_corners_in_marker_frame(
             self._config.car_marker_size_mm / 1000.0
         )

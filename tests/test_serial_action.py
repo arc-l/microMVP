@@ -11,7 +11,7 @@ Tests cover:
 import pytest
 
 from micromvp.core.models import Action
-from micromvp.env.new_real_push_env.serial_action import (
+from micromvp.env.real_env.serial_action import (
     FULL_THRUST,
     HDR0,
     HDR1,

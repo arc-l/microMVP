@@ -8,7 +8,7 @@ import time
 import numpy as np
 import pytest
 
-from micromvp.env.new_real_push_env.observer import (
+from micromvp.env.real_env.observer import (
     ArucoObserver,
     ObserverConfig,
     WorkspaceEstimate,

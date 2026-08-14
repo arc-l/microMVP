@@ -1,8 +1,8 @@
 """
-Test navigation control with NewRealPushEnv (adaptive workspace + ESP-NOW).
+Test navigation control with RealEnv (adaptive workspace + ESP-NOW).
 
 This example demonstrates:
-- NewRealPushEnv with adaptive workspace estimation (no fixed ground markers)
+- RealEnv with adaptive workspace estimation (no fixed ground markers)
 - NavigationController with pure pursuit + CTE-PD path following
 - NavigationCoordinator with web server API and RVG obstacle avoidance
 - GUI controls for speed, rotation, and hand-drawn paths
@@ -44,7 +44,7 @@ from PyQt6.QtWidgets import QApplication
 from micromvp.config import ConfigError, load_config
 from micromvp.controller import NavigationController
 from micromvp.coordinator import NavigationCoordinator
-from micromvp.env import NewRealPushEnv
+from micromvp.env import RealEnv
 from micromvp.gui import MVPWindow
 
 
@@ -67,7 +67,7 @@ def main():
         print(f"[main] {exc}")
         return
 
-    env = NewRealPushEnv(cfg)
+    env = RealEnv(cfg)
 
     # ---- 2. Start env and wait for workspace + car discovery ----
     print("[main] Starting environment …")

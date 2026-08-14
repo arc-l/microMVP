@@ -8,7 +8,7 @@ estimation pipeline and saves structured results for human review.
 Usage:
     python scripts/offline_workspace_analysis.py \
         --input video.mp4 \
-        --calibration src/micromvp/env/new_real_push_env/camera.yaml \
+        --calibration src/micromvp/env/real_env/camera.yaml \
         --output-dir workspace_analysis_output
 
     python scripts/offline_workspace_analysis.py \
@@ -41,7 +41,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from micromvp.env.new_real_push_env.observer import (
+from micromvp.env.real_env.observer import (
     ArucoObserver,
     ObserverConfig,
     WorkspaceEstimate,

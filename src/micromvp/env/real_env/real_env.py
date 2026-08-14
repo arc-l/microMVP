@@ -1,5 +1,5 @@
 """
-NewRealPushEnv – real hardware environment using:
+RealEnv – real hardware environment using:
 - Adaptive workspace estimation (no fixed ground markers)
 - Xiao ESP-NOW serial protocol for motor commands
 """
@@ -16,7 +16,7 @@ from .observer import ArucoObserver, ObserverConfig
 from .serial_action import SerialActionConfig, SerialActionSender
 
 
-class NewRealPushEnv(Environment):
+class RealEnv(Environment):
     """
     Real hardware environment combining:
     - ArucoObserver with adaptive ground-plane workspace
@@ -28,7 +28,7 @@ class NewRealPushEnv(Environment):
         self._started = False
         self._speed_scale = 1.0
 
-        who = "NewRealPushEnv"
+        who = "RealEnv"
         axle = cfg.require_pair("car.axle_offset_cm", who=who)
 
         # Width and height start at zero: the observer measures the real
@@ -65,41 +65,41 @@ class NewRealPushEnv(Environment):
         if self._started:
             return True
 
-        print("[NewRealPushEnv] Starting subsystems...")
+        print("[RealEnv] Starting subsystems...")
 
         if not self._observer.start():
-            print("[NewRealPushEnv] Error: Failed to start observer.")
+            print("[RealEnv] Error: Failed to start observer.")
             return False
 
         if not self._action_sender.start():
-            print("[NewRealPushEnv] Error: Failed to start action sender.")
+            print("[RealEnv] Error: Failed to start action sender.")
             self._observer.stop()
             return False
 
         self._started = True
 
         if wait_for_ready:
-            print(f"[NewRealPushEnv] Waiting for workspace (timeout={timeout}s)...")
+            print(f"[RealEnv] Waiting for workspace (timeout={timeout}s)...")
             t0 = time.time()
             while time.time() - t0 < timeout:
                 if self._observer.is_workspace_ready():
                     self._sync_workspace_from_observer()
                     self._sync_robot_ids_from_observer()
-                    print("[NewRealPushEnv] Workspace ready!")
+                    print("[RealEnv] Workspace ready!")
                     return True
                 time.sleep(0.05)
-            print("[NewRealPushEnv] Warning: workspace not ready within timeout.")
+            print("[RealEnv] Warning: workspace not ready within timeout.")
 
         return True
 
     def close(self) -> None:
         if not self._started:
             return
-        print("[NewRealPushEnv] Closing...")
+        print("[RealEnv] Closing...")
         self._action_sender.stop()
         self._observer.stop()
         self._started = False
-        print("[NewRealPushEnv] Closed.")
+        print("[RealEnv] Closed.")
 
     # ------------------------------------------------------------------
     # Environment interface

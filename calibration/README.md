@@ -29,7 +29,7 @@ python calibration/calibrate_camera.py --camera 0 --resolution 720p
 - 采集 20-40 帧，尽量覆盖画面各区域和多种倾斜角度
 - 按 **c** 开始标定计算
 
-标定完成后自动保存到 `src/micromvp/env/new_real_push_env/camera.yaml`。
+标定完成后自动保存到 `src/micromvp/env/real_env/camera.yaml`。
 
 ### 3. 验证
 

@@ -20,7 +20,7 @@ default that does not match your hardware:
 Usage:
     from micromvp.config import load_config
     cfg = load_config("config/car_v4.yaml")
-    env = NewRealPushEnv(cfg)
+    env = RealEnv(cfg)
 """
 from __future__ import annotations
 

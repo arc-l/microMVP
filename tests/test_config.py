@@ -139,8 +139,8 @@ class TestShippedConfigIsComplete:
     """The shipped config must satisfy every module that reads it."""
 
     def test_builds_every_config_object(self, data):
-        from micromvp.env.new_real_push_env.observer import ObserverConfig
-        from micromvp.env.new_real_push_env.serial_action import SerialActionConfig
+        from micromvp.env.real_env.observer import ObserverConfig
+        from micromvp.env.real_env.serial_action import SerialActionConfig
 
         observer = ObserverConfig.from_config(Config(data, SHIPPED_CONFIG))
         assert observer.car_marker_size_mm > 0

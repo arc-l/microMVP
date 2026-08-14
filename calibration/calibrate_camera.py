@@ -357,7 +357,7 @@ def _resolve_output(output_arg: Optional[str]) -> Path:
     if output_arg:
         return Path(output_arg)
     return (Path(__file__).resolve().parent.parent
-            / "src" / "micromvp" / "env" / "new_real_push_env" / "camera.yaml")
+            / "src" / "micromvp" / "env" / "real_env" / "camera.yaml")
 
 
 # ──────────────────────────────────────────────────────────────────────
