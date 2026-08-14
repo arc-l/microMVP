@@ -135,20 +135,19 @@ Full API in [docs/navigation_api.md](docs/navigation_api.md).
 
 ## Concepts
 
-Driving robots around comes down to the same three jobs, over and over:
-find out where they are, decide what each one should do about it, and send
-commands to the wheels.
+MicroMVP is built from three components.
 
-MicroMVP gives each job its own layer:
+**Controller** does the low-level motion control of a single robot: follow
+this path, rotate to that heading. One controller per robot.
 
-- **Environment** — finds out where the robots are, and drives the wheels
-- **Controller** — one per robot; decides what that robot should do
-- **Coordinator** — runs the loop, and handles anything involving more than
-  one robot
+**Environment** is the world the robots act in. It changes as they move,
+and it gives you observations — where each robot is and which way it faces.
+`SimEnv` simulates it; `RealEnv` is a camera and a radio.
 
-A controller only ever sees a pose and returns two wheel speeds. It has no
-idea whether the thing underneath it is a camera and a radio or a physics
-simulation, which is why the same controller works with either.
+**Coordinator** is in charge overall. It takes the observations from the
+environment and hands each controller what it needs, and it handles
+everything that involves more than one robot — collision avoidance, path
+planning, deciding who goes where.
 
 ### Environment — reports poses, drives the wheels
 
