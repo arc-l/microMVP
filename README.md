@@ -366,94 +366,64 @@ python calibration/calibrate_camera.py   # capture views, solve, write camera.ya
 
 See [calibration/README.md](calibration/README.md).
 
-Recalibrate whenever the lens focus changes: focus changes focal length,
-and the intrinsics stop matching.
+Recalibrate when you use a new camera.
 
 ---
 
 ## Troubleshooting
 
-### The AP is not found
+### A car does not move
 
-`python -m hardware_test.find_ap` probes every candidate port by sending
-real frames and watching the AP's own `[STAT]` counter climb, so a
-device that merely accepts bytes cannot be mistaken for it. Nothing moves
-during the probe — the frames carry zero thrust.
+Check the battery first — a car with a flat battery still shows up in the
+camera and still receives commands, it just cannot drive. Plug in the
+charging cable and run the motion check again:
 
-If it reports nothing:
-
-- The AP shows up as `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on
-  Linux, `COM*` on Windows. Compare `ls /dev/tty*` before and after
-  plugging it in.
-- Close anything holding the port open; an Arduino IDE serial monitor will
-  block it.
-- Confirm `xiao/xiao_ap_ESP_NOW.ino` is flashed to the board.
-
-With more than one serial device attached, `auto` takes the first match and
-says so. Pin the right one in the config to remove the guesswork:
-
-```yaml
-actuation:
-  serial_port: /dev/cu.usbmodem101
+```bash
+python -m hardware_test.check_motion --cars 3
 ```
+
+If it still does not move, the `CAR_ID` in `xiao/xiao_1_8_ESP_NOW.ino` does
+not match the id you are testing. The AP broadcasts to every car at once and
+each one picks out its own slot by id, so a mismatch looks exactly like a
+dead car. Note that ESP-NOW broadcasts are not acknowledged: the AP
+reporting `send_ok` means it sent the packet, not that any car heard it.
+
+If it moves the wrong way, set `actuation.invert_left_wheel` /
+`invert_right_wheel`.
 
 ### The workspace never locks
 
-Symptom: the lock counter climbs, then drops to zero, over and over. It
-never reaches `workspace.lock_frames`, and startup times out with
+The lock counter climbs, drops to zero, and repeats. Startup times out with
 `workspace not ready`.
 
-The usual cause is **the camera hunting for focus**, and it is not obvious
-from watching the video.
+The usual cause is the camera hunting for focus. Contrast-detection
+autofocus moves the lens looking for a sharpness peak; on plain carpet or a
+bare table there is no peak to find, so it searches forever — sharp for
+half a second, blurred for half a second, over and over. Blurred frames
+detect no markers, and one frame without markers clears the accumulated
+window, so the count never reaches `workspace.lock_frames`.
 
-Contrast-detection autofocus moves the lens and compares sharpness to find
-a peak. Point it at plain carpet, a bare table, or a white wall and there
-is no peak to find, so it searches forever: sharp for half a second, blurred
-for half a second, repeating. Blurred frames detect no markers, and a frame
-with no markers clears the accumulated window, so the count can never reach
-30.
+Watch the preview for a couple of seconds and you will see it breathe in
+and out on a regular cycle.
 
-Confirm it by watching the preview for a second or two — you will see it
-breathe in and out on a regular cycle.
+1. **Lock focus in the camera.** OpenCV cannot do this on macOS —
+   `CAP_PROP_AUTOFOCUS` fails to set. Use `uvc-util -I 0 -s auto-focus=0`
+   on macOS, `v4l2-ctl --set-ctrl=focus_automatic_continuous=0` on Linux,
+   or the camera vendor's own utility. Recalibrate afterwards; the focal
+   length has changed.
+2. **Give the autofocus some contrast.** A sheet of white paper under the
+   workspace is usually enough. This is a workaround — move the paper or
+   change the lighting and the hunting can return.
 
-Fixes, in order of how well they hold:
-
-1. **Lock focus in the camera itself.** OpenCV cannot do this on macOS —
-   `CAP_PROP_AUTOFOCUS` and friends all fail to set. Use the vendor's
-   utility, or `uvc-util -I 0 -s auto-focus=0` on macOS, `v4l2-ctl
-   --set-ctrl=focus_automatic_continuous=0` on Linux. Then recalibrate,
-   since the focal length is now different.
-2. **Give the autofocus something to hold onto.** A sheet of white paper or
-   a board under the workspace is usually enough — the markers plus the
-   paper's edges provide the contrast the carpet did not. This is a
-   workaround: move the paper or change the lighting and the hunting can
-   come back.
-3. **Loosen `workspace.tolerance`** — only if the image is genuinely sharp
-   and the estimate is merely noisy. It will not help against hunting.
-
-### Markers are detected but distances are wrong
+### Distances are wrong
 
 Everything looks self-consistent on screen but the numbers are off. Check
-`car.marker_size_mm` and `obstacle.marker_size_mm` against the actual
-printed markers, measuring the black border only. A marker declared 30 mm
-that is really 40 mm puts the whole workspace 25% closer than it is.
+`car.marker_size_mm` and `obstacle.marker_size_mm` against the printed
+markers, measuring the black border only. A marker declared 30 mm that is
+really 40 mm puts the whole workspace 25% closer than it is.
 
-A good cross-check: the system should agree with itself. If cars and
-obstacles disagree about where the floor is, one of the two marker
-descriptions is wrong.
-
-### A car ignores commands
-
-`python -m hardware_test.check_motion --cars <id>` isolates this from the
-vision system entirely. If the wheels still do not turn, the `CAR_ID` in
-the car's firmware does not match the id you are sending to.
-
-Note that ESP-NOW broadcasts are not acknowledged: the AP reporting
-`send_ok` means the AP sent the packet, not that any car heard it.
-
-### The web API will not start
-
-Port 8080 is in use. Change `navigation.webserver_port`.
+The system should agree with itself: if cars and obstacles disagree about
+where the floor is, one of the two marker descriptions is wrong.
 
 ---
 
