@@ -149,20 +149,21 @@ environment and hands each controller what it needs, and it handles
 everything that involves more than one robot — collision avoidance, path
 planning, deciding who goes where.
 
-### Environment — reports poses, drives the wheels
+### Environment — takes actions, returns observations
 
-Owns the camera and the link to the cars. It reports poses and accepts
-wheel commands, and knows nothing about goals or paths.
+It applies the actions it is given, which changes the state of the world,
+and it reports observations of that state.
 
 ```python
 observations = env.observe()               # {car_id: RobotObservation(x, y, theta, t)}
 env.apply_actions({3: Action(0.5, 0.5)})   # left/right wheel thrust, -1..1
 ```
 
-Two implementations ship: `SimEnv` (in-memory, no hardware; takes its own
-`SimConfig` rather than a deployment YAML) and `RealEnv` (ArUco tracking
-plus the ESP-NOW serial bridge). Anything satisfying `observe` /
-`apply_actions` works.
+That is the entire interface. How the state changes and where the
+observations come from is up to the implementation: `SimEnv` steps a model
+in memory, `RealEnv` reads poses from the overhead camera and sends wheel
+commands to the AP. Anything implementing `observe` / `apply_actions`
+works.
 
 `RealEnv` also derives the workspace itself — there are no calibration
 markers on the floor. It fits the ground plane from the markers it can see,
