@@ -705,13 +705,26 @@ class ArucoObserver:
         if ids is None or len(ids) == 0:
             return markers, corners, ids
 
-        rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-            corners, marker_size_mm / 1000.0, self._K, self._D
-        )
+        # solvePnP per marker, rather than aruco.estimatePoseSingleMarkers,
+        # which was deprecated in OpenCV 4.7 and removed in 5.0. The wrapper
+        # did exactly this internally: IPPE_SQUARE against the marker's own
+        # four corners, which is the solver meant for square planar targets.
+        object_points = self._marker_corners_in_marker_frame(marker_size_mm / 1000.0)
 
         for i, marker_id in enumerate(ids.flatten().tolist()):
-            rvec = rvecs[i, 0, :].astype(np.float32)
-            tvec = tvecs[i, 0, :].astype(np.float32)
+            image_points = corners[i].reshape(4, 2).astype(np.float64)
+            ok, rvec, tvec = cv2.solvePnP(
+                object_points,
+                image_points,
+                self._K,
+                self._D,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE,
+            )
+            if not ok:
+                continue
+
+            rvec = rvec.reshape(3).astype(np.float32)
+            tvec = tvec.reshape(3).astype(np.float32)
             R, _ = cv2.Rodrigues(rvec)
             markers[int(marker_id)] = _MarkerInfo(
                 marker_id=int(marker_id),
