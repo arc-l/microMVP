@@ -135,9 +135,20 @@ Full API in [docs/navigation_api.md](docs/navigation_api.md).
 
 ## Concepts
 
-Three layers. A controller never talks to the camera or the radio directly,
-so the same controller code works whether it is driving a simulated robot
-or a real one.
+Driving robots around comes down to the same three jobs, over and over:
+find out where they are, decide what each one should do about it, and send
+commands to the wheels.
+
+MicroMVP gives each job its own layer:
+
+- **Environment** — finds out where the robots are, and drives the wheels
+- **Controller** — one per robot; decides what that robot should do
+- **Coordinator** — runs the loop, and handles anything involving more than
+  one robot
+
+A controller only ever sees a pose and returns two wheel speeds. It has no
+idea whether the thing underneath it is a camera and a radio or a physics
+simulation, which is why the same controller works with either.
 
 ### Environment — reports poses, drives the wheels
 
