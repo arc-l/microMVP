@@ -44,6 +44,9 @@ class RealEnv(Environment):
             max_wheel_speed=cfg.require("car.max_wheel_speed_cm_s", float, who=who),
             frequency=cfg.require("runtime.frequency", float, who=who),
             car_id_list=[],
+            marker_to_axle_offset=cfg.require_pair(
+                "car.marker_to_axle_offset_cm", who=who
+            ),
         )
 
         self._observer = ArucoObserver(ObserverConfig.from_config(cfg))

@@ -201,10 +201,14 @@ control:
     tolerance_deg: 2.5
     stable_time_sec: 0.5
 
-    # Rotation thrust range. The minimum has to be high enough to actually
-    # break static friction.
+    # Rotation thrust range. Below 15 degrees of error the controller holds
+    # speed_min until it reaches tolerance_deg, so speed_min sets how far it
+    # overshoots: at 0.15 the car turns 1.36 deg per control cycle, which
+    # exceeds tolerance_deg after two cycles of sensing and actuation delay
+    # and leaves it hunting around the target. Lower is steadier, until it
+    # is too low to break static friction and the car stalls short.
     speed_max: 0.25
-    speed_min: 0.15
+    speed_min: 0.10
 
 # -----------------------------------------------------------------------------
 # Navigation coordinator

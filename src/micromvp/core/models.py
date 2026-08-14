@@ -65,6 +65,11 @@ class WorkspaceConfig:
     # 6. Number of robots/cars in this workspace
     car_id_list: list
 
+    # 7. marker 中心 -> 两轮轴心的向量，车头朝 Y 轴正方向时测量。
+    # 位姿上报的是轮轴中心，而人眼在画面里对照的是 marker，
+    # 所以渲染需要这个偏移把车贴图摆回 marker 的位置。
+    marker_to_axle_offset: Tuple[float, float] = (0.0, 0.0)
+
     @property
     def dt(self) -> float:
         # return 每次时间步长 (秒)

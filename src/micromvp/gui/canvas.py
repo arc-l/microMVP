@@ -71,6 +71,7 @@ class CarGraphicsItem(QGraphicsObject):
         car_pixmap: QPixmap,
         parent: Optional[QGraphicsItem] = None,
         show_collision_box: bool = True,
+        marker_to_axle_offset: Tuple[float, float] = (0.0, 0.0),
     ):
         super().__init__(parent)
         self.car_id = car_id
@@ -80,6 +81,8 @@ class CarGraphicsItem(QGraphicsObject):
         self._car_height_m = float(car_height_m)
         self._offset_w_m = float(offset_w_m)
         self._offset_h_m = float(offset_h_m)
+        self._marker_dx_m = float(marker_to_axle_offset[0])
+        self._marker_dy_m = float(marker_to_axle_offset[1])
 
         # pixel (updated in update_visuals)
         self._w_px = 1.0
@@ -180,11 +183,20 @@ class CarGraphicsItem(QGraphicsObject):
         pm_w = max(1, self._pixmap_source.width())
         img_scale = self._w_px / float(pm_w)
         self._pixmap_item.setTransform(QTransform.fromScale(img_scale, img_scale), False)
-        # Place the pixmap so its visual center aligns with the car body's center,
-        # while the item origin stays at the axle (wheel center).
+
+        # Centre the sprite on the *marker*, not on the body. The sprite is a
+        # stand-in — real cars do not look like it — so what makes it useful is
+        # lining up with the one thing a person can also see in the camera
+        # image. The item origin stays at the axle, which is where the pose is
+        # reported and where the selection circle is drawn.
+        #
+        # marker_to_axle_offset points marker -> axle in the car frame with the
+        # car facing +Y, so axle -> marker is its negation. Converting car frame
+        # (Y forward) to item-local pixels (Y down) flips the Y sign again,
+        # leaving -dx to the right and +dy downward.
         self._pixmap_item.setPos(
-            (self._w_px / 2.0) - self._off_w_px,
-            -((self._h_px / 2.0) - self._off_h_px),
+            -self._marker_dx_m * pixels_per_meter,
+            self._marker_dy_m * pixels_per_meter,
         )
         self._pixmap_item.setZValue(0)
 
@@ -415,7 +427,8 @@ class MVPCanvas(QGraphicsView):
                     car_height_m=self._ws_config.car_height,
                     offset_w_m=self._ws_config.offset_w,
                     offset_h_m=self._ws_config.offset_h,
-                    car_pixmap=self._car_pixmap
+                    car_pixmap=self._car_pixmap,
+                    marker_to_axle_offset=self._ws_config.marker_to_axle_offset,
                 )
                 self._scene.addItem(item)
                 self._car_items[cid] = item
