@@ -9,22 +9,33 @@ control logic never talks to hardware directly — it goes through three
 layers you can replace one at a time.
 
 ```
-                    ┌──────────────────────────┐
-                    │           GUI            │  draw paths, click targets
-                    └────────────▲─────────────┘
-                                 │ car states, overlays
-                    ┌────────────┴─────────────┐
-                    │       Coordinator        │  who does what
-                    └────────────▲─────────────┘
-                    observations │ actions
-       ┌─────────────────────────┴────────────────────────┐
-       │  Controller (one per robot) — how to get there   │
-       └─────────────────────────▲────────────────────────┘
-                    observations │ actions
-                    ┌────────────┴─────────────┐
-                    │       Environment        │  where things are,
-                    └──────────────────────────┘  and moving the wheels
+┌───────────────────────────────────────────────────────────────────┐
+│                               GUI                                 │
+│        draws the workspace, takes clicks and drawn paths          │
+└───────────────────────────────────────────────────────────────────┘
+                                 ↑↓
+┌───────────────────────────────────────────────────────────────────┐
+│                           Coordinator                             │
+│    distributes observations, collects actions, plans paths,       │
+│    assigns tasks, bridges the GUI                                 │
+└───────────────────────────────────────────────────────────────────┘
+                                 ↑↓
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│  Controller 1   │   │  Controller 2   │   │  Controller N   │
+│  one per robot  │   │  one per robot  │   │  one per robot  │
+│  pose → wheels  │   │  pose → wheels  │   │  pose → wheels  │
+└─────────────────┘   └─────────────────┘   └─────────────────┘
+                                 ↑↓
+┌───────────────────────────────────────────────────────────────────┐
+│                           Environment                             │
+│    SimEnv or RealEnv — observe() reports poses,                   │
+│    apply_actions() drives the wheels                              │
+└───────────────────────────────────────────────────────────────────┘
 ```
+
+The Coordinator is the only layer that touches the Environment: it passes
+each robot's observation down to that robot's Controller, and sends the
+collected actions back.
 
 ---
 
