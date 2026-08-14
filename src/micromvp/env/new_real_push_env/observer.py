@@ -85,6 +85,15 @@ class ObserverConfig:
     # Obstacle detection throttle
     obstacle_detection_interval_sec: float = 1.0
 
+    # Per-car outlier rejection filter.
+    # If the position or angle change from the previous accepted observation
+    # exceeds these thresholds (within the expected dt), the new reading is
+    # discarded and the previous valid observation is reused.
+    outlier_filter_enabled: bool = True
+    outlier_max_jump_cm: float = 3.0       # max plausible displacement per frame
+    outlier_max_angle_jump_deg: float = 60.0  # max plausible angle change per frame
+    outlier_max_age_sec: float = 0.5       # stale prev-obs stops gating
+
 
 @dataclass
 class CarObservation:
@@ -221,6 +230,9 @@ class ArucoObserver:
         self._frame_size: Optional[Tuple[int, int]] = None  # (width, height)
 
         self._car_detector: Optional[cv2.aruco.ArucoDetector] = None
+        self._car_detector_alt: Optional[cv2.aruco.ArucoDetector] = None
+        self._car_detector_alt_name: Optional[str] = None
+        self._last_alt_dict_log_t: float = 0.0
         self._obstacle_detector: Optional[cv2.aruco.ArucoDetector] = None
         self._obstacle_marker_len_m: float = 0.0
         self._obstacle_marker_config: Dict[int, List[Point]] = {}
@@ -231,6 +243,7 @@ class ArucoObserver:
 
         self._observations: Dict[int, CarObservation] = {}
         self._obs_lock = threading.Lock()
+        self._prev_valid_obs: Dict[int, CarObservation] = {}  # outlier filter state
 
         self._obstacle_polygons: List[List[Point]] = []
         self._obstacle_lock = threading.Lock()
@@ -380,7 +393,12 @@ class ArucoObserver:
         if frame is None:
             return
         cv2.imshow(self._config.preview_window_name, frame)
-        cv2.waitKey(1)
+        # pollKey() is non-blocking and does not run OpenCV's own event loop,
+        # preventing it from stealing keyboard focus away from Qt windows.
+        if hasattr(cv2, "pollKey"):
+            cv2.pollKey()
+        else:
+            cv2.waitKey(1)
 
     # ------------------------------------------------------------------
     # Background loop – decomposed into small steps
@@ -402,6 +420,29 @@ class ArucoObserver:
                 self._config.car_marker_size_mm,
                 self._config.car_marker_height_cm,
             )
+            # If we didn't detect any car markers, try an alternate 4x4 dictionary.
+            # In practice, many "4x4 series" printouts get mixed between 4X4_50
+            # and 4X4_100. Marker size does NOT affect detectMarkers(), but the
+            # dictionary does.
+            if (car_ids is None or len(car_ids) == 0) and self._car_detector_alt is not None:
+                car_markers_alt, car_corners_alt, car_ids_alt = self._detect_markers(
+                    gray,
+                    self._car_detector_alt,
+                    self._config.car_marker_size_mm,
+                    self._config.car_marker_height_cm,
+                )
+                if car_ids_alt is not None and len(car_ids_alt) > 0:
+                    car_markers, car_corners, car_ids = car_markers_alt, car_corners_alt, car_ids_alt
+                    # log at most once per 2s
+                    if timestamp - self._last_alt_dict_log_t > 2.0:
+                        self._last_alt_dict_log_t = timestamp
+                        alt_name = self._car_detector_alt_name or "ALT"
+                        try:
+                            found = car_ids_alt.flatten().tolist()
+                        except Exception:
+                            found = []
+                        print(f"[Observer] Car dict fallback hit: {alt_name}, ids={found}")
+
             obstacle_markers, obs_corners, obs_ids = self._detect_markers(
                 gray,
                 self._obstacle_detector,
@@ -476,6 +517,8 @@ class ArucoObserver:
         car_obs: Dict[int, CarObservation] = {}
         if workspace.ready:
             car_obs = self._build_car_observations(car_markers, workspace, timestamp)
+            if self._config.outlier_filter_enabled:
+                car_obs = self._apply_outlier_filter(car_obs, timestamp)
             with self._obs_lock:
                 self._observations = car_obs
             with self._car_ids_lock:
@@ -484,6 +527,48 @@ class ArucoObserver:
             with self._obs_lock:
                 self._observations = {}
         return car_obs
+
+    def _apply_outlier_filter(
+        self,
+        raw_obs: Dict[int, CarObservation],
+        timestamp: float,
+    ) -> Dict[int, CarObservation]:
+        """Reject single-frame position/angle outliers caused by ArUco mis-detection."""
+        filtered: Dict[int, CarObservation] = {}
+        max_jump = self._config.outlier_max_jump_cm
+        max_angle = self._config.outlier_max_angle_jump_deg
+        max_age = self._config.outlier_max_age_sec
+
+        for car_id, obs in raw_obs.items():
+            prev = self._prev_valid_obs.get(car_id)
+            if prev is None or (timestamp - prev.timestamp) > max_age:
+                filtered[car_id] = obs
+                self._prev_valid_obs[car_id] = obs
+                continue
+
+            dx = obs.x_cm - prev.x_cm
+            dy = obs.y_cm - prev.y_cm
+            dist = (dx * dx + dy * dy) ** 0.5
+
+            dtheta = (obs.yaw_deg - prev.yaw_deg + 180.0) % 360.0 - 180.0
+
+            if dist > max_jump and abs(dtheta) > max_angle:
+                # Both position and angle jumped unreasonably — likely corner
+                # reordering artefact.  Keep previous valid observation with
+                # updated timestamp so downstream sees a fresh reading.
+                kept = CarObservation(
+                    car_id=prev.car_id,
+                    x_cm=prev.x_cm,
+                    y_cm=prev.y_cm,
+                    yaw_deg=prev.yaw_deg,
+                    timestamp=timestamp,
+                )
+                filtered[car_id] = kept
+            else:
+                filtered[car_id] = obs
+                self._prev_valid_obs[car_id] = obs
+
+        return filtered
 
     def _update_obstacles(
         self,
@@ -649,14 +734,19 @@ class ArucoObserver:
 
     @staticmethod
     def _build_plane_basis(normal: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Build an orthonormal (x, y) basis on the plane with the given normal."""
+        """Build an orthonormal (x, y) basis on the plane with the given normal.
+
+        Convention: X ≈ camera-right, Y ≈ camera-up.
+        cross(x, n) points opposite to camera-Y, i.e. upward in the image.
+        This gives a standard Y-up coordinate system (origin bottom-left).
+        """
         ref = np.array([1.0, 0.0, 0.0], dtype=np.float32)
         x_axis = ref - float(np.dot(ref, normal)) * normal
         if np.linalg.norm(x_axis) < 1e-6:
             ref = np.array([0.0, 1.0, 0.0], dtype=np.float32)
             x_axis = ref - float(np.dot(ref, normal)) * normal
         x_axis = x_axis / np.linalg.norm(x_axis)
-        y_axis = np.cross(normal, x_axis)
+        y_axis = np.cross(x_axis, normal)
         y_axis = y_axis / np.linalg.norm(y_axis)
         return x_axis.astype(np.float32), y_axis.astype(np.float32)
 
@@ -706,7 +796,14 @@ class ArucoObserver:
     ) -> Optional[List[Point]]:
         """
         Compute the largest axis-aligned rectangle inscribed in a convex
-        quadrilateral (given in order: TL, TR, BR, BL in plane coords).
+        quadrilateral.
+
+        Args:
+            quad: 4 corners in image order: TL, TR, BR, BL.
+                  With Y-up convention: TL/TR have high Y, BL/BR have low Y.
+
+        Returns:
+            4 corners in order BL, BR, TR, TL (origin at bottom-left).
         """
         if len(quad) != 4:
             return None
@@ -714,12 +811,12 @@ class ArucoObserver:
 
         left = max(tl[0], bl[0]) + margin_cm
         right = min(tr[0], br[0]) - margin_cm
-        top = max(tl[1], tr[1]) + margin_cm
-        bottom = min(bl[1], br[1]) - margin_cm
+        bottom = max(br[1], bl[1]) + margin_cm   # inner boundary from low-Y side
+        top = min(tl[1], tr[1]) - margin_cm      # inner boundary from high-Y side
 
-        if right <= left or bottom <= top:
+        if right <= left or top <= bottom:
             return None
-        return [(left, top), (right, top), (right, bottom), (left, bottom)]
+        return [(left, bottom), (right, bottom), (right, top), (left, top)]
 
     # ------------------------------------------------------------------
     # Coordinate transforms
@@ -783,35 +880,44 @@ class ArucoObserver:
             self._config.marker_center_to_wheel_center_offset_cm, dtype=np.float64
         )
 
+        normal_64 = np.array(workspace.normal_cam, dtype=np.float64)
+        x_axis_64 = np.array(workspace.x_axis_cam, dtype=np.float64)
+        y_axis_64 = np.array(workspace.y_axis_cam, dtype=np.float64)
+
         for car_id, marker in car_markers.items():
-            center_cam = self._project_marker_center_to_floor(marker)
-            center_xy = np.array(
-                self._camera_to_workspace_xy(center_cam, workspace), dtype=np.float64
-            )
+            R, _ = cv2.Rodrigues(marker.rvec)
+            R_64 = R.astype(np.float64)
+            tvec_64 = marker.tvec.reshape(3, 1).astype(np.float64)
 
-            top_mid = 0.5 * (marker.image_corners[0] + marker.image_corners[1])
-            bottom_mid = 0.5 * (marker.image_corners[2] + marker.image_corners[3])
-            top_floor = self._project_pixel_to_floor(top_mid, workspace)
-            bottom_floor = self._project_pixel_to_floor(bottom_mid, workspace)
-            if top_floor is None or bottom_floor is None:
-                continue
-
-            top_xy = np.array(
-                self._camera_to_workspace_xy(top_floor, workspace), dtype=np.float64
-            )
-            bottom_xy = np.array(
-                self._camera_to_workspace_xy(bottom_floor, workspace), dtype=np.float64
-            )
-            heading = top_xy - bottom_xy
-            yaw_deg = float(np.degrees(np.arctan2(heading[1], heading[0]))) % 360.0
-
-            theta_rad = np.radians(yaw_deg)
-            rot = np.array(
-                [[np.cos(theta_rad), -np.sin(theta_rad)],
-                 [np.sin(theta_rad),  np.cos(theta_rad)]],
+            # --- Position: transform 4 marker corners into camera frame,
+            #     project onto locked workspace XY, average for center.
+            #     Same approach as real_push_env: uses fixed workspace axes
+            #     so per-frame rvec noise does NOT get amplified. ---
+            corners_cam = (R_64 @ self._car_marker_pts_m.T + tvec_64).T  # (4, 3)
+            corners_xy = np.array(
+                [self._camera_to_workspace_xy(c, workspace) for c in corners_cam],
                 dtype=np.float64,
             )
-            wheel_center = center_xy + rot @ offset
+            center_xy = corners_xy.mean(axis=0)
+
+            # --- Heading: extract from rvec rotation matrix ---
+            marker_up_cam = R_64[:, 1]
+            forward_on_plane = marker_up_cam - np.dot(marker_up_cam, normal_64) * normal_64
+            fwd_len = float(np.linalg.norm(forward_on_plane))
+            if fwd_len < 1e-8:
+                continue
+
+            heading_x = float(np.dot(forward_on_plane, x_axis_64))
+            heading_y = float(np.dot(forward_on_plane, y_axis_64))
+            yaw_deg = float(np.degrees(np.arctan2(heading_y, heading_x))) % 360.0
+
+            # --- Wheel center offset ---
+            # marker_center_to_wheel_center_offset_cm is defined in the marker/body
+            # local frame where +X means car-right and +Y means car-forward.
+            # yaw_deg, however, is measured from workspace +X along the forward axis.
+            # So we must expand the offset using the world-space right/forward basis
+            # instead of a plain R(theta) that assumes local +X is forward.
+            wheel_center = center_xy + self._marker_xy_to_workspace_xy(offset, yaw_deg)
 
             observations[car_id] = CarObservation(
                 car_id=car_id,
@@ -822,6 +928,17 @@ class ArucoObserver:
             )
 
         return observations
+
+    @staticmethod
+    def _marker_xy_to_workspace_xy(
+        marker_xy: np.ndarray,
+        yaw_deg: float,
+    ) -> np.ndarray:
+        """Map marker-local XY (X=right, Y=forward) into workspace XY."""
+        theta = np.radians(yaw_deg)
+        forward = np.array([np.cos(theta), np.sin(theta)], dtype=np.float64)
+        right = np.array([np.sin(theta), -np.cos(theta)], dtype=np.float64)
+        return (right * marker_xy[0]) + (forward * marker_xy[1])
 
     # ------------------------------------------------------------------
     # Obstacle polygons
@@ -842,36 +959,24 @@ class ArucoObserver:
 
             polygon_local = self._obstacle_marker_config[marker.marker_id]
 
-            center_cam = self._project_marker_center_to_floor(marker)
-            center_xy = np.array(
-                self._camera_to_workspace_xy(center_cam, workspace), dtype=np.float64
-            )
+            R, _ = cv2.Rodrigues(marker.rvec)
+            R_64 = R.astype(np.float64)
+            tvec_64 = marker.tvec.reshape(3, 1).astype(np.float64)
 
-            top_mid = 0.5 * (marker.image_corners[0] + marker.image_corners[1])
-            bottom_mid = 0.5 * (marker.image_corners[2] + marker.image_corners[3])
-            top_floor = self._project_pixel_to_floor(top_mid, workspace)
-            bottom_floor = self._project_pixel_to_floor(bottom_mid, workspace)
-            if top_floor is None or bottom_floor is None:
-                continue
-
-            top_xy = np.array(
-                self._camera_to_workspace_xy(top_floor, workspace), dtype=np.float64
-            )
-            bottom_xy = np.array(
-                self._camera_to_workspace_xy(bottom_floor, workspace), dtype=np.float64
-            )
-            heading = top_xy - bottom_xy
-            yaw = float(np.arctan2(heading[1], heading[0]))
-            rot = np.array(
-                [[np.cos(yaw), -np.sin(yaw)],
-                 [np.sin(yaw),  np.cos(yaw)]],
-                dtype=np.float64,
-            )
-
+            # Transform each polygon vertex through the full 3D chain
+            # (marker-local → camera → workspace), same as real_push_env.
+            # This avoids decomposing into a heading angle, which caused a
+            # 90-degree offset because polygon_local is defined in the
+            # marker's own coordinate frame (X=right, Y=up).
             polygon_ws: List[Point] = []
             for pt_local_cm in polygon_local:
-                pt = np.array([pt_local_cm[0], pt_local_cm[1]], dtype=np.float64)
-                polygon_ws.append(tuple((center_xy + rot @ pt).tolist()))
+                pt_m = np.array(
+                    [pt_local_cm[0] / 100.0, pt_local_cm[1] / 100.0, 0.0],
+                    dtype=np.float64,
+                ).reshape(3, 1)
+                pt_cam = (R_64 @ pt_m + tvec_64).flatten()
+                pt_xy = self._camera_to_workspace_xy(pt_cam, workspace)
+                polygon_ws.append(pt_xy)
             polygons.append(polygon_ws)
 
         return polygons
@@ -1014,10 +1119,35 @@ class ArucoObserver:
         self._car_detector = aruco.ArucoDetector(
             aruco.getPredefinedDictionary(car_dict_enum), params
         )
+        # Alternate detector to improve robustness across 4x4 families.
+        # Only define an alt for 4x4; for other families keep None.
+        if self._config.car_dict == "DICT_4X4_50":
+            self._car_detector_alt = aruco.ArucoDetector(
+                aruco.getPredefinedDictionary(aruco.DICT_4X4_100), params
+            )
+            self._car_detector_alt_name = "DICT_4X4_100"
+        elif self._config.car_dict == "DICT_4X4_100":
+            self._car_detector_alt = aruco.ArucoDetector(
+                aruco.getPredefinedDictionary(aruco.DICT_4X4_50), params
+            )
+            self._car_detector_alt_name = "DICT_4X4_50"
+        else:
+            self._car_detector_alt = None
+            self._car_detector_alt_name = None
 
         obs_dict_enum = dicts.get(self._config.obstacle_dict, aruco.DICT_5X5_50)
         self._obstacle_detector = aruco.ArucoDetector(
             aruco.getPredefinedDictionary(obs_dict_enum), params
+        )
+
+        # Pre-compute marker corner points in marker-local frame (meters).
+        # Used to transform PnP results into 4 camera-frame corners, matching
+        # the approach from real_push_env that averages 4 corners for position.
+        self._car_marker_pts_m = self._marker_corners_in_marker_frame(
+            self._config.car_marker_size_mm / 1000.0
+        )
+        self._obs_marker_pts_m = self._marker_corners_in_marker_frame(
+            self._config.obstacle_marker_size_mm / 1000.0
         )
 
         if self._config.obstacle_marker_config_file:
@@ -1032,6 +1162,15 @@ class ArucoObserver:
             except Exception as exc:
                 print(f"[Observer] Failed to load obstacle config: {exc}")
                 self._obstacle_marker_config = {}
+
+    @staticmethod
+    def _marker_corners_in_marker_frame(marker_len_m: float) -> np.ndarray:
+        """4 corners of a square marker in its local frame (TL, TR, BR, BL)."""
+        h = marker_len_m / 2.0
+        return np.array(
+            [[-h, h, 0.0], [h, h, 0.0], [h, -h, 0.0], [-h, -h, 0.0]],
+            dtype=np.float64,
+        )
 
     @staticmethod
     def _load_obstacle_config(

@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from micromvp.env.new_real_push_env.observer import (
+    ArucoObserver,
     ObserverConfig,
     WorkspaceEstimate,
     _WorkspaceLockState,
@@ -199,3 +200,25 @@ class TestAggregation:
         result = state.aggregate()
         norm = np.linalg.norm(result.normal_cam)
         assert abs(norm - 1.0) < 1e-6
+
+
+class TestMarkerOffsetTransform:
+    def test_marker_local_forward_stays_aligned_with_yaw(self):
+        offset = np.array([0.0, 1.8], dtype=np.float64)
+
+        out_x = ArucoObserver._marker_xy_to_workspace_xy(offset, 0.0)
+        out_y = ArucoObserver._marker_xy_to_workspace_xy(offset, 90.0)
+        out_left = ArucoObserver._marker_xy_to_workspace_xy(offset, 180.0)
+
+        np.testing.assert_allclose(out_x, np.array([1.8, 0.0]), atol=1e-6)
+        np.testing.assert_allclose(out_y, np.array([0.0, 1.8]), atol=1e-6)
+        np.testing.assert_allclose(out_left, np.array([-1.8, 0.0]), atol=1e-6)
+
+    def test_marker_local_right_tracks_car_right_side(self):
+        offset = np.array([1.0, 0.0], dtype=np.float64)
+
+        out_x = ArucoObserver._marker_xy_to_workspace_xy(offset, 0.0)
+        out_y = ArucoObserver._marker_xy_to_workspace_xy(offset, 90.0)
+
+        np.testing.assert_allclose(out_x, np.array([0.0, -1.0]), atol=1e-6)
+        np.testing.assert_allclose(out_y, np.array([1.0, 0.0]), atol=1e-6)

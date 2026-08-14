@@ -92,7 +92,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Serial packet test for Xiao AP: control only car #6"
     )
-    ap.add_argument("--port", default="/dev/tty.usbmodem3101", help="serial port path")
+    ap.add_argument("--port", default="/dev/tty.usbmodem31301", help="serial port path")
     ap.add_argument("--baud", type=int, default=115200, help="serial baud rate")
     ap.add_argument("--hz", type=float, default=30.0, help="send rate while holding command")
     ap.add_argument("--car-id", type=int, default=CAR_ID, help="target car id")

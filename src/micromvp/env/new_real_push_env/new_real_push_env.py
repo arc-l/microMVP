@@ -91,12 +91,12 @@ v3_config = NewRealPushConfig(
 
 v4_config = NewRealPushConfig(
     car_width=4.2,
-    car_height=5.4,
+    car_height=4.8,
     offset_w=2.1,
-    offset_h=4.1,
+    offset_h=4.5,
     wheel_base=4.2,
-    marker_center_to_wheel_center_offset_cm=(0.0, 0.0),
-    car_marker_size_mm=27.0,
+    marker_center_to_wheel_center_offset_cm=(0.0, 1.8),
+    car_marker_size_mm=36.0,
 )
 
 

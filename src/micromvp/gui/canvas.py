@@ -158,15 +158,34 @@ class CarGraphicsItem(QGraphicsObject):
         self._off_h_px = float(off_h_px)
 
         # update hit rect/path in LOCAL PIXELS
-        self._hit_rect = QRectF(-(self._w_px-self._off_w_px), -(self._h_px-self._off_h_px), self._w_px, self._h_px)
+        # Local coords are screen-pixel local (X right, Y down), and the item
+        # origin is the *wheel-axle center* (workspace x,y).
+        #
+        # WorkspaceConfig.offset_w/offset_h are defined in the car body frame
+        # when the car faces +Y (up): axle position relative to body bottom-left.
+        # For a +Y facing car, the body's bottom is +Y in screen (down), and the
+        # body's top is -Y in screen (up). Therefore:
+        # - left  = -offset_w
+        # - top   = -(car_height - offset_h)
+        self._hit_rect = QRectF(
+            -self._off_w_px,
+            -(self._h_px - self._off_h_px),
+            self._w_px,
+            self._h_px,
+        )
         self._hit_path = QPainterPath()
         self._hit_path.addRect(self._hit_rect)
 
         # update pixmap scale (keep centered by offset)
         pm_w = max(1, self._pixmap_source.width())
         img_scale = self._w_px / float(pm_w)
-        self._pixmap_item.setScale(img_scale)
-        self._pixmap_item.setPos(0.0, 0.0)  # centered by offset already
+        self._pixmap_item.setTransform(QTransform.fromScale(img_scale, img_scale), False)
+        # Place the pixmap so its visual center aligns with the car body's center,
+        # while the item origin stays at the axle (wheel center).
+        self._pixmap_item.setPos(
+            (self._w_px / 2.0) - self._off_w_px,
+            -((self._h_px / 2.0) - self._off_h_px),
+        )
         self._pixmap_item.setZValue(0)
 
         # update collision rect visual

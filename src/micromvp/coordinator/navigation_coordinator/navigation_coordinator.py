@@ -72,7 +72,7 @@ class NavigationCoordinator(Coordinator):
         active_robot_id: Optional[int] = None,
         webserver_port: int = 8080,
         robot_geometry: Optional[List[Tuple[float, float]]] = None,
-        robot_geometry_scale: float = 1.1,
+        robot_geometry_scale: float = 1.2,
     ) -> None:
         """
         Initialize navigation coordinator.
@@ -85,9 +85,9 @@ class NavigationCoordinator(Coordinator):
             webserver_port: Port for the web server API (default: 8080)
             robot_geometry: Robot shape as list of (x,y) vertices for RVG
                            Default is a rectangle based on car dimensions
-            robot_geometry_scale: Scale factor for robot geometry (default: 1.0)
-                                 Use >1.0 (e.g., 1.2) for more conservative paths
-                                 that keep larger distance from obstacles
+            robot_geometry_scale: Scale factor for robot geometry (default: 1.2)
+                                 Use >1.0 for more conservative paths that keep
+                                 larger distance from obstacles
         """
         super().__init__(ws_config, controllers)
 
@@ -145,15 +145,47 @@ class NavigationCoordinator(Coordinator):
         # Path interpolation settings
         # Maximum distance between consecutive path points (smaller = denser path)
         self._max_point_spacing = max(ws_config.car_width, ws_config.car_height) * 0.1
+        # Encode RVG "rotate in place" states as short heading markers so the
+        # downstream point-following controller keeps the planned orientation.
+        self._heading_marker_length = max(ws_config.car_width, ws_config.car_height) * 0.25
 
         # Start web server
         self._start_webserver()
 
     def _default_robot_geometry(self) -> List[Tuple[float, float]]:
-        """Create default robot geometry from workspace config."""
-        w = self._ws_config.car_width / 2
-        h = self._ws_config.car_height / 2
-        return [(-w, -h), (w, -h), (w, h), (-w, h)]
+        """Create default robot geometry for RVG path planning.
+
+        The polygon is centred on the wheel-axle (rotation centre) and
+        oriented so that theta=0 corresponds to the car facing X+,
+        matching the workspace heading convention.
+
+        WorkspaceConfig defines offset_w / offset_h as the axle position
+        relative to the body bottom-left corner *when the car faces Y+*.
+        We rotate the body polygon by -90° (CW) so that at theta=0
+        the polygon faces X+.
+        """
+        ow = self._ws_config.offset_w
+        oh = self._ws_config.offset_h
+        cw = self._ws_config.car_width
+        ch = self._ws_config.car_height
+        left_extent = ow
+        right_extent = cw - ow
+        rear_extent = oh
+        front_extent = ch - oh
+
+        # The physical V4 geometry can be very nose-short relative to the axle.
+        # RVG then accepts paths that are theoretically collision-free but
+        # operationally too aggressive for a forward-only car. Use a more
+        # conservative planner footprint whose front reach is at least the
+        # lateral half-width.
+        planner_front_extent = max(front_extent, left_extent, right_extent)
+
+        return [
+            (-rear_extent, left_extent),
+            (-rear_extent, -right_extent),
+            (planner_front_extent, -right_extent),
+            (planner_front_extent, left_extent),
+        ]
 
     # -------------------------------------------------------------------------
     # Web Server Implementation
@@ -305,80 +337,130 @@ class NavigationCoordinator(Coordinator):
         """
         try:
             from rvg import vertex, polygon, rvg
-            import numpy as np
         except ImportError:
             print("[NavigationCoordinator] RVG not available, using direct path")
             return [start[:2], goal[:2]]
 
+        TWO_PI = 2.0 * math.pi
+
         try:
-            # Create border from workspace
+            # --- border (CCW rectangle) ---
             w = self._ws_config.width
             h = self._ws_config.height
             border_verts = [
-                vertex(0, 0),
-                vertex(w, 0),
-                vertex(w, h),
-                vertex(0, h)
+                vertex(0, 0), vertex(w, 0), vertex(w, h), vertex(0, h)
             ]
             border = polygon(border_verts, False)
 
-            # Create robot polygon
+            # --- robot polygon ---
+            # _robot_geometry vertices are centred on the wheel-axle and
+            # oriented for theta=0 = facing X+  (see _default_robot_geometry)
             robot_verts = [vertex(pt[0], pt[1]) for pt in self._robot_geometry]
-            robot_poly = polygon(robot_verts, False)
+            robot_poly = polygon(robot_verts, vertex(0, 0), False)
 
-            # Create obstacle polygons
+            # --- obstacle polygons ---
             obstacle_polys = []
             for obs in obstacles:
                 if len(obs) >= 3:
                     obs_verts = [vertex(pt[0], pt[1]) for pt in obs]
-                    obstacle_polys.append(polygon(obs_verts))
+                    obstacle_polys.append(polygon(obs_verts, False))
 
-            # Create RVG solver
+            # --- RVG solver ---
             solver = rvg(
                 robot=robot_poly,
                 border=border,
                 obstacles=obstacle_polys,
-                resolution=18,
+                resolution=36,
                 numThreads=1,
                 verbose=False,
-                fineApprox=True
+                fineApprox=True,
             )
             solver.setWeight(euclideanWeight=1.0, rotationalWeight=0.1)
 
-            # Create start and goal vertices
-            start_v = vertex(start[0], start[1], 0, 2 * np.pi, 0)
-            goal_v = vertex(goal[0], goal[1], 0, 2 * np.pi, 0)
+            # --- start / goal vertices with actual heading ---
+            start_theta = math.radians(start[2]) % TWO_PI
+            goal_theta = math.radians(goal[2]) % TWO_PI
+            start_v = vertex(start[0], start[1], 0.0, TWO_PI, start_theta)
+            goal_v = vertex(goal[0], goal[1], 0.0, TWO_PI, goal_theta)
 
-            # Check if start and goal are legal configurations before calling shortestPath
-            # This prevents C++ runtime_error that would crash the program
+            # Pre-check legality to avoid C++ runtime_error
             layers = solver.getLayers()
             if layers:
-                # Check against first layer (any layer should work for position check)
                 layer = layers[0]
                 if not layer.legalConfig(start_v):
-                    print(f"[NavigationCoordinator] Start position ({start[0]:.2f}, {start[1]:.2f}) is not legal (too close to obstacle/border), using direct path")
+                    print(f"[NavigationCoordinator] Start ({start[0]:.1f}, {start[1]:.1f}) "
+                          "illegal (too close to obstacle/border), using direct path")
                     return [start[:2], goal[:2]]
                 if not layer.legalConfig(goal_v):
-                    print(f"[NavigationCoordinator] Goal position ({goal[0]:.2f}, {goal[1]:.2f}) is not legal (too close to obstacle/border), using direct path")
+                    print(f"[NavigationCoordinator] Goal ({goal[0]:.1f}, {goal[1]:.1f}) "
+                          "illegal (too close to obstacle/border), using direct path")
                     return [start[:2], goal[:2]]
 
-            # Find shortest path
+            # --- shortest path ---
             path_result = solver.shortestPath(start_v, goal_v)
 
-            # Convert result to list of points
             if path_result is None or len(path_result) == 0:
                 return [start[:2], goal[:2]]
 
-            path = []
-            for v in path_result:
-                path.append((v.getX(), v.getY()))
+            path = self._convert_rvg_path(path_result)
 
-            return path if path else [start[:2], goal[:2]]
+            return path if len(path) >= 2 else [start[:2], goal[:2]]
 
         except Exception as e:
             print(f"[NavigationCoordinator] Path planning error: {e}")
-            # Fall back to direct path
             return [start[:2], goal[:2]]
+
+    def _convert_rvg_path(self, path_result: List[Any]) -> List[Point]:
+        """
+        Convert RVG configuration states into a point path.
+
+        RVG can emit repeated (x, y) positions with different theta values to
+        represent in-place rotations. The downstream controller only follows
+        points, so dropping those states loses critical orientation
+        information. We encode them as short heading markers instead.
+        """
+        path: List[Point] = []
+        prev_xy: Optional[Point] = None
+        prev_theta: Optional[float] = None
+        count = len(path_result)
+
+        for idx, v in enumerate(path_result):
+            xy = (v.getX(), v.getY())
+            theta = v.getTheta()
+
+            if prev_xy is None:
+                path.append(xy)
+                prev_xy = xy
+                prev_theta = theta
+                continue
+
+            same_xy = (
+                abs(xy[0] - prev_xy[0]) <= 1e-6
+                and abs(xy[1] - prev_xy[1]) <= 1e-6
+            )
+
+            if same_xy:
+                dtheta = (theta - (prev_theta or 0.0) + math.pi) % (2.0 * math.pi) - math.pi
+                is_terminal_rotation = idx == (count - 1)
+                if abs(dtheta) > math.radians(1.0) and not is_terminal_rotation:
+                    marker = (
+                        xy[0] + self._heading_marker_length * math.cos(theta),
+                        xy[1] + self._heading_marker_length * math.sin(theta),
+                    )
+                    if (
+                        abs(marker[0] - path[-1][0]) > 1e-6
+                        or abs(marker[1] - path[-1][1]) > 1e-6
+                    ):
+                        path.append(marker)
+                prev_theta = theta
+                continue
+
+            if abs(xy[0] - path[-1][0]) > 1e-6 or abs(xy[1] - path[-1][1]) > 1e-6:
+                path.append(xy)
+            prev_xy = xy
+            prev_theta = theta
+
+        return path
 
     def _interpolate_path(
         self,

@@ -212,3 +212,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# macOS
+.DS_Store
+
+# RVG planner (external, ~470MB with build artefacts) -- install separately
+rvg/
+
+# Diagnostic / logging outputs from examples and tools
+diag_*.csv
+diag_*.png
+keyboard_log.csv
+keyboard_log_plot.png
