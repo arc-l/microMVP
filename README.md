@@ -92,16 +92,16 @@ python -m hardware_test.check_motion --cars 3
 It drives forward, backward, counter-clockwise, then clockwise, pausing
 between each so you can watch.
 
-- **Car does not move at all** — the `CAR_ID` in `xiao/xiao_1_8_ESP_NOW.ino`
-  probably does not match the id you tested. The gateway broadcasts to
-  everyone; each car picks out its own slot by id.
-- **Car moves backwards, or spins the wrong way** — set
-  `actuation.invert_left_wheel` / `invert_right_wheel` in the config.
+### 3. Connect the camera
 
-### 3. Check the camera sees the field
+Plug the camera in and point it at the area you want to drive in. On a Mac,
+Photo Booth is the quickest way to see what it sees.
 
-Point the camera down at the workspace with the cars in view, then run the
-full example:
+There is no strict requirement on angle or height. The workspace is derived
+from the view itself, so all that matters is that the camera covers the
+area you want to work in.
+
+### 4. Run the demo
 
 ```bash
 python examples/navigation.py --config config/car_v4.yaml
@@ -118,7 +118,7 @@ If it sits there and never becomes ready, read
 [the workspace never locks](#the-workspace-never-locks) — the usual cause
 surprises people.
 
-### 4. Drive it
+### 5. Drive it
 
 In the window: draw a curve on the canvas and the robot follows it, or
 click a point and it plans a path there. Click a car to select it. The
