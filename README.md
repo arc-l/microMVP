@@ -114,10 +114,6 @@ On startup it prints the workspace it measured and the cars it found:
 [main] Detected cars: [3]
 ```
 
-If it sits there and never becomes ready, read
-[the workspace never locks](#the-workspace-never-locks) — the usual cause
-surprises people.
-
 ### 5. Drive it
 
 In the window: draw a curve on the canvas and the robot follows it, or
@@ -302,27 +298,21 @@ missing required field 'car.marker_size_mm'
   that section currently has: aruco_dict, axle_offset_cm, body_height_cm, ...
 ```
 
-This is deliberate. A default marker size that silently disagrees with your
-hardware does not crash — it scales every distance the system reports, and
-you find out much later. The opposite mistake is caught too: a field the
-file contains but nothing reads (usually a typo) is reported on startup.
+A field the file contains but nothing reads — usually a typo — is reported
+on startup too.
 
 ### Measuring the physical fields
 
-These three are the ones people get wrong, and all three quietly corrupt
-every coordinate:
-
 - **`car.marker_size_mm`** — the side of the marker's *black border*, not
   including the white quiet zone. ArUco infers distance from apparent size,
-  so a 25% error here is a 25% error in every distance.
+  so this scales every distance the system reports.
 - **`car.marker_height_cm`** — how far the marker plane sits above the
   floor, i.e. the height of the car.
 - **`obstacle.marker_height_cm`** — same for obstacle blocks. Use `0.0` if
   the markers lie flat on the ground.
 
-Cars and obstacles must use **different ArUco dictionaries** (4x4 and 5x5 by
-default), otherwise a car and an obstacle with the same id are
-indistinguishable.
+Cars and obstacles must use different ArUco dictionaries (4x4 and 5x5 by
+default), so that a car and an obstacle sharing an id stay distinguishable.
 
 ---
 
@@ -338,11 +328,8 @@ indistinguishable.
 
 RVG is not vendored in this repo; it is a separate C++ project with Python
 bindings. Build it and make sure `import rvg` works, then set
-`planner.name: rvg`.
-
-If RVG is selected but not importable, the system warns once and falls back
-to straight lines. The warning says so explicitly, because a silent fallback
-means paths that no longer avoid obstacles.
+`planner.name: rvg`. If it is selected but not importable, the system warns
+once and falls back to straight lines.
 
 The RVG-dependent tests are excluded from the default run and need the
 plugin present:
@@ -366,9 +353,8 @@ python calibration/calibrate_camera.py   # capture views, solve, write camera.ya
 
 See [calibration/README.md](calibration/README.md).
 
-Recalibrate whenever the lens focus changes. Focus changes focal length,
-and the intrinsics stop matching — which is why the next section matters
-more than it looks.
+Recalibrate whenever the lens focus changes: focus changes focal length,
+and the intrinsics stop matching.
 
 ---
 
