@@ -15,17 +15,19 @@ dependencies = [
   "PyQt6>=6.6",
   "numpy>=1.26",
   "opencv-contrib-python>=4.8",
-  "pyzmq>=25.1",
   "pyserial>=3.5",
-  "pyusb>=1.2",
-  "munkres>=1.1",
+  "PyYAML>=6.0",
 ]
 
-[project.scripts]
-micromvp = "micromvp.main:main"
+[project.optional-dependencies]
+# Camera calibration board rendering
+calibration = ["matplotlib>=3.8"]
+dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["rvg: needs the external RVG planner plugin installed"]
+addopts = "-m 'not rvg'"

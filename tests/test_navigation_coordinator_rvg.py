@@ -1,8 +1,16 @@
+"""Path-planning tests that need the external RVG planner.
+
+Excluded from the default run: `import rvg` succeeds against the bare rvg/
+directory as a namespace package, so importorskip cannot tell whether the
+compiled extension is really usable. Run explicitly with:
+
+    pytest -m rvg
+"""
 import math
 
 import pytest
 
-pytest.importorskip("rvg")
+pytestmark = pytest.mark.rvg
 
 from micromvp.controller.base import Controller
 from micromvp.coordinator.navigation_coordinator.navigation_coordinator import (
