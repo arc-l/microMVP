@@ -26,6 +26,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any, Optional, Tuple
 from functools import partial
 
+from micromvp.config import Config
 from micromvp.controller.base import Controller
 from micromvp.controller.navigation_controller import NavigationController, NavigationState
 from micromvp.coordinator.base import Coordinator
@@ -65,6 +66,34 @@ class NavigationCoordinator(Coordinator):
         gui.register_callback("on_curve_drawn", coordinator.on_curve_drawn)
     """
 
+    @classmethod
+    def from_config(
+        cls,
+        ws_config: WorkspaceConfig,
+        controllers: Dict[int, Controller],
+        cfg: "Config",
+    ) -> "NavigationCoordinator":
+        """Build from the deployment YAML (`navigation` and `planner`)."""
+        who = "NavigationCoordinator"
+        coordinator = cls(
+            ws_config,
+            controllers,
+            active_robot_id=cfg.require("navigation.active_robot_id", who=who),
+            webserver_port=cfg.require("navigation.webserver_port", int, who=who),
+            robot_geometry_scale=cfg.require(
+                "navigation.robot_geometry_scale", float, who=who
+            ),
+        )
+        coordinator._planner_name = cfg.require("planner.name", str, who=who)
+        coordinator._rvg_resolution = cfg.require("planner.rvg.resolution", int, who=who)
+        coordinator._rvg_euclidean_weight = cfg.require(
+            "planner.rvg.euclidean_weight", float, who=who
+        )
+        coordinator._rvg_rotational_weight = cfg.require(
+            "planner.rvg.rotational_weight", float, who=who
+        )
+        return coordinator
+
     def __init__(
         self,
         ws_config: WorkspaceConfig,
@@ -90,6 +119,13 @@ class NavigationCoordinator(Coordinator):
                                  larger distance from obstacles
         """
         super().__init__(ws_config, controllers)
+
+        # Planner settings; from_config() overrides these from the YAML.
+        self._planner_name = "rvg"
+        self._rvg_resolution = 36
+        self._rvg_euclidean_weight = 1.0
+        self._rvg_rotational_weight = 0.1
+        self._planner_warned = False
 
         # Active robot selection
         if active_robot_id is not None:
@@ -335,10 +371,15 @@ class NavigationCoordinator(Coordinator):
         Returns:
             Path as list of (x, y) points, or None if planning fails
         """
+        if self._planner_name == "straight":
+            return [start[:2], goal[:2]]
+
         try:
             from rvg import vertex, polygon, rvg
         except ImportError:
-            print("[NavigationCoordinator] RVG not available, using direct path")
+            self._warn_planner_unavailable(
+                "the rvg module could not be imported"
+            )
             return [start[:2], goal[:2]]
 
         TWO_PI = 2.0 * math.pi
@@ -370,12 +411,15 @@ class NavigationCoordinator(Coordinator):
                 robot=robot_poly,
                 border=border,
                 obstacles=obstacle_polys,
-                resolution=36,
+                resolution=self._rvg_resolution,
                 numThreads=1,
                 verbose=False,
                 fineApprox=True,
             )
-            solver.setWeight(euclideanWeight=1.0, rotationalWeight=0.1)
+            solver.setWeight(
+                euclideanWeight=self._rvg_euclidean_weight,
+                rotationalWeight=self._rvg_rotational_weight,
+            )
 
             # --- start / goal vertices with actual heading ---
             start_theta = math.radians(start[2]) % TWO_PI
@@ -409,6 +453,23 @@ class NavigationCoordinator(Coordinator):
         except Exception as e:
             print(f"[NavigationCoordinator] Path planning error: {e}")
             return [start[:2], goal[:2]]
+
+    @property
+    def active_robot_id(self) -> Optional[int]:
+        """The robot the GUI and web API currently drive."""
+        return self._active_robot_id
+
+    def _warn_planner_unavailable(self, reason: str) -> None:
+        """Report a missing planner once, not on every planning call."""
+        if self._planner_warned:
+            return
+        self._planner_warned = True
+        print(
+            f"[NavigationCoordinator] planner '{self._planner_name}' is unavailable "
+            f"({reason}).\n"
+            f"  Falling back to straight-line paths, which ignore obstacles.\n"
+            f"  Set planner.name to 'straight' in the config to silence this."
+        )
 
     def _convert_rvg_path(self, path_result: List[Any]) -> List[Point]:
         """

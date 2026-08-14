@@ -21,7 +21,6 @@ Threading contract (same as real_push_env.observer):
 """
 from __future__ import annotations
 
-import json
 import platform
 import threading
 import time
@@ -32,6 +31,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 import yaml
+
+from micromvp.config import Config, ConfigError
 
 
 Point = Tuple[float, float]
@@ -59,8 +60,10 @@ class ObserverConfig:
     # Wheel-center offset applied after pose estimation
     marker_center_to_wheel_center_offset_cm: tuple[float, float] = (0.0, 0.0)
 
-    # Obstacle config: JSON file with per-marker polygon_local (same as real_push_env)
-    obstacle_marker_config_file: str = ""
+    # Marker id -> polygon in the marker's local frame (cm). Registered
+    # obstacles contribute geometry to path planning; unregistered ids are
+    # still detected but carry no shape.
+    obstacle_shapes: Dict[int, List["Point"]] = field(default_factory=dict)
 
     # Workspace estimation
     workspace_margin_cm: float = 1.0
@@ -93,6 +96,76 @@ class ObserverConfig:
     outlier_max_jump_cm: float = 3.0       # max plausible displacement per frame
     outlier_max_angle_jump_deg: float = 60.0  # max plausible angle change per frame
     outlier_max_age_sec: float = 0.5       # stale prev-obs stops gating
+
+    @classmethod
+    def from_config(cls, cfg: "Config") -> "ObserverConfig":
+        """Build from the deployment YAML. Every field is required there."""
+        who = "ArucoObserver"
+        return cls(
+            camera_device=cfg.require("camera.device", int, who=who),
+            resolution=cfg.require("camera.resolution", str, who=who),
+            fps=cfg.require("camera.fps", int, who=who),
+            undistort=cfg.require("camera.undistort", bool, who=who),
+            calibration_file=cfg.require("camera.calibration_file", str, who=who),
+            warmup_frames=cfg.require("camera.warmup_frames", int, who=who),
+            no_preview=not cfg.require("camera.preview", bool, who=who),
+            car_dict=cfg.require("car.aruco_dict", str, who=who),
+            car_marker_size_mm=cfg.require("car.marker_size_mm", float, who=who),
+            car_marker_height_cm=cfg.require("car.marker_height_cm", float, who=who),
+            marker_center_to_wheel_center_offset_cm=cfg.require_pair(
+                "car.marker_to_axle_offset_cm", who=who
+            ),
+            obstacle_dict=cfg.require("obstacle.aruco_dict", str, who=who),
+            obstacle_marker_size_mm=cfg.require("obstacle.marker_size_mm", float, who=who),
+            obstacle_marker_height_cm=cfg.require("obstacle.marker_height_cm", float, who=who),
+            obstacle_detection_interval_sec=cfg.require(
+                "obstacle.detection_interval_sec", float, who=who
+            ),
+            obstacle_shapes=_obstacle_shapes(cfg, who),
+            workspace_margin_cm=cfg.require("workspace.margin_cm", float, who=who),
+            workspace_min_side_cm=cfg.require("workspace.min_side_cm", float, who=who),
+            workspace_lock_frames=cfg.require("workspace.lock_frames", int, who=who),
+            workspace_width_tolerance_cm=cfg.require(
+                "workspace.tolerance.width_cm", float, who=who
+            ),
+            workspace_height_tolerance_cm=cfg.require(
+                "workspace.tolerance.height_cm", float, who=who
+            ),
+            workspace_origin_tolerance_m=cfg.require(
+                "workspace.tolerance.origin_m", float, who=who
+            ),
+            workspace_normal_angle_tolerance_deg=cfg.require(
+                "workspace.tolerance.normal_deg", float, who=who
+            ),
+            outlier_filter_enabled=cfg.require("tracking.outlier_filter", bool, who=who),
+            outlier_max_jump_cm=cfg.require("tracking.max_jump_cm", float, who=who),
+            outlier_max_angle_jump_deg=cfg.require(
+                "tracking.max_angle_jump_deg", float, who=who
+            ),
+            outlier_max_age_sec=cfg.require("tracking.max_age_sec", float, who=who),
+        )
+
+
+def _obstacle_shapes(cfg: "Config", who: str) -> Dict[int, List["Point"]]:
+    """Read obstacle.shapes into {marker_id: [(x, y), ...]}."""
+    shapes: Dict[int, List[Point]] = {}
+    raw = cfg.require("obstacle.shapes", dict, who=who)
+    for marker_id, definition in raw.items():
+        try:
+            key = int(marker_id)
+        except (TypeError, ValueError):
+            raise ConfigError(
+                f"obstacle.shapes key {marker_id!r} is not a marker id\n"
+                f"  config    : {cfg.source}"
+            ) from None
+        polygon = (definition or {}).get("polygon")
+        if not polygon or len(polygon) < 3:
+            raise ConfigError(
+                f"obstacle.shapes.{key}.polygon needs at least 3 points\n"
+                f"  config    : {cfg.source}"
+            )
+        shapes[key] = [(float(p[0]), float(p[1])) for p in polygon]
+    return shapes
 
 
 @dataclass
@@ -234,7 +307,6 @@ class ArucoObserver:
         self._car_detector_alt_name: Optional[str] = None
         self._last_alt_dict_log_t: float = 0.0
         self._obstacle_detector: Optional[cv2.aruco.ArucoDetector] = None
-        self._obstacle_marker_len_m: float = 0.0
         self._obstacle_marker_config: Dict[int, List[Point]] = {}
 
         self._workspace = WorkspaceEstimate()
@@ -1150,18 +1222,10 @@ class ArucoObserver:
             self._config.obstacle_marker_size_mm / 1000.0
         )
 
-        if self._config.obstacle_marker_config_file:
-            try:
-                self._obstacle_marker_len_m, self._obstacle_marker_config = (
-                    self._load_obstacle_config(self._config.obstacle_marker_config_file)
-                )
-                print(
-                    f"[Observer] Loaded obstacle config with "
-                    f"{len(self._obstacle_marker_config)} markers"
-                )
-            except Exception as exc:
-                print(f"[Observer] Failed to load obstacle config: {exc}")
-                self._obstacle_marker_config = {}
+        self._obstacle_marker_config = dict(self._config.obstacle_shapes)
+        if self._obstacle_marker_config:
+            ids = ", ".join(str(k) for k in sorted(self._obstacle_marker_config))
+            print(f"[Observer] Registered obstacle shapes for marker ids: {ids}")
 
     @staticmethod
     def _marker_corners_in_marker_frame(marker_len_m: float) -> np.ndarray:
@@ -1171,30 +1235,6 @@ class ArucoObserver:
             [[-h, h, 0.0], [h, h, 0.0], [h, -h, 0.0], [-h, -h, 0.0]],
             dtype=np.float64,
         )
-
-    @staticmethod
-    def _load_obstacle_config(
-        file_path: str,
-    ) -> Tuple[float, Dict[int, List[Point]]]:
-        with open(file_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        marker_size_m = config.get("marker_size_mm", 40.0) / 1000.0
-        markers = config.get("markers", {})
-
-        marker_config: Dict[int, List[Point]] = {}
-        for marker_id_str, marker_def in markers.items():
-            try:
-                marker_id = int(marker_id_str)
-                polygon_local = marker_def.get("polygon_local", [])
-                if polygon_local:
-                    marker_config[marker_id] = [
-                        (pt[0], pt[1]) for pt in polygon_local
-                    ]
-            except (ValueError, TypeError):
-                continue
-
-        return marker_size_m, marker_config
 
     def _open_camera(self) -> Optional[cv2.VideoCapture]:
         resolutions = {"480p": (640, 480), "720p": (1280, 720), "1080p": (1920, 1080)}

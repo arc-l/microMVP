@@ -16,6 +16,8 @@ Payload layout (matches xiao/xiao_1_8_ESP_NOW.ino):
 """
 from __future__ import annotations
 
+import glob
+import platform
 import threading
 import time
 from dataclasses import dataclass, field
@@ -23,6 +25,7 @@ from typing import Dict, Iterable, List, Optional
 
 import serial
 
+from micromvp.config import Config
 from micromvp.core.models import Action
 
 
@@ -41,6 +44,65 @@ class SerialActionConfig:
     invert_left_wheel: bool = False
     invert_right_wheel: bool = False
     initial_robot_ids: List[int] = field(default_factory=list)
+
+    @classmethod
+    def from_config(cls, cfg: "Config", robot_ids: Optional[List[int]] = None) -> "SerialActionConfig":
+        """Build from the deployment YAML. Every field is required there."""
+        who = "SerialActionSender"
+        port = cfg.require("actuation.serial_port", str, who=who)
+        return cls(
+            port=resolve_serial_port(port),
+            baudrate=cfg.require("actuation.baudrate", int, who=who),
+            send_hz=cfg.require("actuation.send_hz", float, who=who),
+            cars_per_level=cfg.require("actuation.cars_per_level", int, who=who),
+            invert_left_wheel=cfg.require("actuation.invert_left_wheel", bool, who=who),
+            invert_right_wheel=cfg.require("actuation.invert_right_wheel", bool, who=who),
+            initial_robot_ids=list(robot_ids or []),
+        )
+
+
+def candidate_serial_ports() -> List[str]:
+    """Device paths that could plausibly be the ESP-NOW gateway, best first."""
+    patterns = [
+        "/dev/cu.usbmodem*",   # macOS, callout device (does not block on DCD)
+        "/dev/ttyACM*",        # Linux, USB CDC
+        "/dev/ttyUSB*",        # Linux, USB serial bridges
+    ]
+    found: List[str] = []
+    for pattern in patterns:
+        found.extend(sorted(glob.glob(pattern)))
+    if platform.system() == "Windows":
+        found.extend(f"COM{i}" for i in range(1, 33))
+    return found
+
+
+def resolve_serial_port(port: str) -> str:
+    """Turn the configured port into a concrete device path.
+
+    "auto" picks the first plausible device. That is a convenience for a
+    desk with one gateway plugged in; pin the path in the config once you
+    know it, and run `python -m hardware_test.find_ap` to confirm which
+    device actually answers.
+    """
+    if port != "auto":
+        return port
+
+    candidates = candidate_serial_ports()
+    if not candidates:
+        raise RuntimeError(
+            "actuation.serial_port is 'auto' but no serial device was found.\n"
+            "  Plug in the Xiao gateway, or set an explicit path in the config.\n"
+            "  Run `python -m hardware_test.find_ap` to list what is connected."
+        )
+    chosen = candidates[0]
+    if len(candidates) > 1:
+        print(
+            f"[SerialSender] serial_port=auto matched {len(candidates)} devices "
+            f"{candidates}, using {chosen}. Pin it in the config to be sure."
+        )
+    else:
+        print(f"[SerialSender] serial_port=auto resolved to {chosen}")
+    return chosen
 
 
 class SerialActionSender:

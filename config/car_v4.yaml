@@ -1,0 +1,243 @@
+# =============================================================================
+# MicroMVP deployment config — V4 cars, overhead camera, ESP-NOW gateway.
+#
+# One file describes one physical setup completely. Copy it, edit the numbers
+# to match your table, and you can reproduce the deployment exactly.
+#
+# Every field here is REQUIRED unless marked optional. Modules read what they
+# need straight out of this file; a missing field fails loudly at startup
+# naming the field, rather than quietly using a default that does not match
+# your hardware.
+#
+# Lengths are centimetres unless the field name says otherwise.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# The car, and the marker glued on top of it
+# -----------------------------------------------------------------------------
+car:
+  # ArUco dictionary for car markers. Must differ from obstacle.aruco_dict,
+  # otherwise a car and an obstacle sharing an id cannot be told apart.
+  aruco_dict: DICT_4X4_50
+
+  # Side length of the marker's black border, excluding the white quiet zone.
+  # Measure it — an error here scales every distance the vision system reports.
+  marker_size_mm: 36.0
+
+  # Height of the marker plane above the floor, i.e. how tall the car is.
+  marker_height_cm: 5.0
+
+  # Marker centre -> wheel-axle centre, in the marker's own frame, measured
+  # with the car facing +Y. The axle is what the kinematics rotate about.
+  marker_to_axle_offset_cm: [0.0, 1.8]
+
+  # Body footprint, used for rendering and collision.
+  body_width_cm: 4.2
+  body_height_cm: 4.8
+
+  # Axle position relative to the body's bottom-left corner, car facing +Y.
+  axle_offset_cm: [2.1, 4.5]
+
+  # Distance between the two wheels — the differential-drive baseline.
+  wheel_base_cm: 4.2
+
+  # Linear speed of one wheel at full thrust. Used to convert normalised
+  # wheel commands into predicted motion.
+  max_wheel_speed_cm_s: 10.0
+
+# -----------------------------------------------------------------------------
+# Obstacles: blocks with a marker on top, registered by marker id
+# -----------------------------------------------------------------------------
+obstacle:
+  aruco_dict: DICT_5X5_50
+  marker_size_mm: 30.0
+
+  # Height of the obstacle marker above the floor, i.e. how tall the block is.
+  # Set 0.0 if the markers lie flat on the ground.
+  marker_height_cm: 4.0
+
+  # Obstacle detection is throttled; poses are refreshed at most this often.
+  detection_interval_sec: 1.0
+
+  # Marker id -> the polygon that marker stands for, in the marker's local
+  # frame (origin at the marker centre, +X right, +Y up, centimetres).
+  # An id that is detected but not registered here is tracked but contributes
+  # no geometry to path planning.
+  shapes:
+    0:
+      description: "4 x 16 cm bar"
+      polygon: [[-6.0, -2.0], [10.0, -2.0], [10.0, 2.0], [-6.0, 2.0]]
+    1:
+      description: "11 x 11 cm cross"
+      polygon: [[-2.0, -2.0], [6.0, -2.0], [6.0, 2.0], [2.0, 2.0],
+                [2.0, 6.0], [-6.0, 6.0], [-6.0, 2.0], [-2.0, 2.0]]
+
+# -----------------------------------------------------------------------------
+# Camera
+# -----------------------------------------------------------------------------
+camera:
+  device: 0
+  resolution: 720p          # 480p | 720p | 1080p
+  fps: 60
+
+  # Intrinsics, produced by calibration/calibrate_camera.py. The resolution
+  # recorded in this file must match `resolution` above or startup aborts.
+  #
+  # Recalibrate whenever the lens focus changes. If your camera hunts for
+  # focus the intrinsics drift frame to frame and every pose estimate drifts
+  # with them — see the focus section of the README.
+  calibration_file: config/camera.yaml
+
+  undistort: false
+
+  # Frames discarded at startup while auto-exposure settles.
+  warmup_frames: 30
+
+  # Live annotated preview window. Costs a little CPU; turn it off for
+  # headless runs.
+  preview: true
+
+# -----------------------------------------------------------------------------
+# Workspace estimation
+#
+# There are no calibration markers on the floor. The ground plane is fitted
+# from the markers that are visible, the camera's field of view is projected
+# onto that plane, and the largest axis-aligned rectangle inside it becomes
+# the workspace. Origin is its bottom-left corner, +X right, +Y up.
+# -----------------------------------------------------------------------------
+workspace:
+  # Shrink each side by this much, to keep robots off the very edge of view.
+  margin_cm: 1.0
+
+  # Reject an estimate whose shorter side is below this — usually means too
+  # few markers were visible to fit a sensible plane.
+  min_side_cm: 10.0
+
+  # The estimate must hold steady across this many consecutive frames before
+  # it is locked. Once locked it never changes, so all coordinates stay
+  # comparable for the rest of the session.
+  lock_frames: 30
+
+  # How much the estimate may wander across that window and still count as
+  # steady. Loosen these if the workspace never locks; tighten them if it
+  # locks onto a sloppy estimate.
+  tolerance:
+    width_cm: 2.0
+    height_cm: 2.0
+    origin_m: 0.01
+    normal_deg: 3.0
+
+# -----------------------------------------------------------------------------
+# Per-car observation filtering
+# -----------------------------------------------------------------------------
+tracking:
+  # Discard a reading that jumps further than physically plausible in one
+  # frame and reuse the previous one. Guards against marker mis-detections.
+  outlier_filter: true
+  max_jump_cm: 3.0
+  max_angle_jump_deg: 60.0
+
+  # Once the last good reading is older than this, stop gating: a genuinely
+  # moved robot must be able to recover.
+  max_age_sec: 0.5
+
+# -----------------------------------------------------------------------------
+# Actuation — USB serial to the Xiao ESP-NOW gateway
+# -----------------------------------------------------------------------------
+actuation:
+  # "auto" scans the likely device paths and picks the gateway. Pin it to a
+  # specific path once you know it, e.g. /dev/cu.usbmodem101 (macOS),
+  # /dev/ttyACM0 (Linux), COM3 (Windows).
+  # `python -m hardware_test.find_ap` reports what is connected.
+  serial_port: auto
+
+  baudrate: 115200
+
+  # Commands are re-sent continuously at this rate; the cars stop on their
+  # own if the stream dies.
+  send_hz: 30.0
+
+  # Cars per ESP-NOW broadcast level. Must match CARS_PER_LEVEL in the car
+  # firmware (xiao/xiao_1_8_ESP_NOW.ino).
+  cars_per_level: 10
+
+  # Flip if a wheel is wired backwards.
+  invert_left_wheel: false
+  invert_right_wheel: false
+
+# -----------------------------------------------------------------------------
+# Main loop
+# -----------------------------------------------------------------------------
+runtime:
+  # Observe -> control -> actuate cycles per second.
+  frequency: 30.0
+
+# -----------------------------------------------------------------------------
+# Navigation controller — pure pursuit with a cross-track-error PD term,
+# plus in-place rotation
+# -----------------------------------------------------------------------------
+control:
+  # Wheel thrust ceiling, 0..1.
+  max_speed: 0.3
+
+  # Pure-pursuit lookahead. null derives it from the car size, which is
+  # usually what you want; set a number in cm to override.
+  lookahead_cm: null
+
+  # Distance at which a waypoint counts as reached. null derives from car size.
+  goal_tolerance_cm: null
+
+  # Path resampling: neighbouring points are split until no gap exceeds
+  # this fraction of the car size.
+  max_point_gap_ratio: 0.01
+
+  # Forward-only search window, as a fraction of car size. Stops the
+  # controller jumping across a self-intersection in the path.
+  no_skip_ratio: 0.5
+
+  rotation:
+    # In-place rotation finishes once the heading error stays inside this
+    # band for stable_time_sec.
+    tolerance_deg: 2.5
+    stable_time_sec: 0.5
+
+    # Rotation thrust range. The minimum has to be high enough to actually
+    # break static friction.
+    speed_max: 0.25
+    speed_min: 0.15
+
+# -----------------------------------------------------------------------------
+# Navigation coordinator
+# -----------------------------------------------------------------------------
+navigation:
+  # HTTP control API: POST /goto, /follow_path, /setup_obstacle, GET /status.
+  # See docs/navigation_api.md.
+  webserver_port: 8080
+
+  # Robot id the GUI drives at startup. null selects the first car detected.
+  active_robot_id: null
+
+  # The planner treats the robot as this much larger than it is, so planned
+  # paths keep clear of obstacles. 1.0 plans against the true footprint.
+  robot_geometry_scale: 1.2
+
+# -----------------------------------------------------------------------------
+# Path planning
+# -----------------------------------------------------------------------------
+planner:
+  # "rvg"      — rotational visibility graph, plans in SE(2) and respects the
+  #              robot's shape and heading. Needs the optional RVG plugin.
+  # "straight" — straight line from start to goal, ignoring obstacles.
+  #
+  # If "rvg" is selected but the plugin is not importable, the system warns
+  # once at startup and falls back to "straight".
+  name: rvg
+
+  rvg:
+    # Orientation layers in the visibility graph. Higher is smoother and
+    # slower; 36 gives 10-degree steps.
+    resolution: 36
+
+    # Relative cost of translating versus rotating.
+    euclidean_weight: 1.0
+    rotational_weight: 0.1

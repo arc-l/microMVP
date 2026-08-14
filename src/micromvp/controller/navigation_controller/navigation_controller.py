@@ -33,6 +33,7 @@ import time
 from typing import List, Optional, Tuple
 from enum import Enum, auto
 
+from micromvp.config import Config
 from micromvp.controller.base import Controller
 from micromvp.core.models import (
     Action,
@@ -104,10 +105,44 @@ class NavigationController(Controller):
     """
 
     # -------- Rotation parameters --------
+    # Defaults for direct construction; from_config() overrides them per
+    # instance from the deployment YAML.
     ROTATION_TOLERANCE_DEG = 2.5    # within +-2.5 deg
     ROTATION_STABLE_TIME = 0.5      # seconds in tolerance to finish
     ROTATION_SPEED_MAX = 0.25
     ROTATION_SPEED_MIN = 0.15
+
+    @classmethod
+    def from_config(
+        cls,
+        robot_id: int,
+        ws_config: WorkspaceConfig,
+        cfg: "Config",
+    ) -> "NavigationController":
+        """Build from the deployment YAML (the `control` section)."""
+        who = "NavigationController"
+        controller = cls(
+            robot_id,
+            ws_config,
+            lookahead_distance=cfg.require("control.lookahead_cm", who=who),
+            max_speed=cfg.require("control.max_speed", float, who=who),
+            goal_tolerance=cfg.require("control.goal_tolerance_cm", who=who),
+            max_point_gap_ratio=cfg.require("control.max_point_gap_ratio", float, who=who),
+            no_skip_ratio=cfg.require("control.no_skip_ratio", float, who=who),
+        )
+        controller.ROTATION_TOLERANCE_DEG = cfg.require(
+            "control.rotation.tolerance_deg", float, who=who
+        )
+        controller.ROTATION_STABLE_TIME = cfg.require(
+            "control.rotation.stable_time_sec", float, who=who
+        )
+        controller.ROTATION_SPEED_MAX = cfg.require(
+            "control.rotation.speed_max", float, who=who
+        )
+        controller.ROTATION_SPEED_MIN = cfg.require(
+            "control.rotation.speed_min", float, who=who
+        )
+        return controller
 
     def __init__(
         self,
@@ -154,6 +189,7 @@ class NavigationController(Controller):
         self._target_theta: Optional[float] = None
         self._rotation_stable_start: Optional[float] = None
         self._on_rotation_done_callback: Optional[callable] = None
+
 
         # Nav state
         self._nav_state = NavigationState.IDLE

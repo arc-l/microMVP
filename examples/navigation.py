@@ -35,66 +35,39 @@ Web API Examples:
     curl http://localhost:8080/status
 """
 import argparse
-import dataclasses
 import threading
 import time
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
+from micromvp.config import ConfigError, load_config
 from micromvp.controller import NavigationController
 from micromvp.coordinator import NavigationCoordinator
-from micromvp.env import NewRealPushEnv, NewRealPushConfig, v3_config, v4_config
+from micromvp.env import NewRealPushEnv
 from micromvp.gui import MVPWindow
 
 
 def main():
-    parser = argparse.ArgumentParser(description="NewRealPushEnv navigation test")
+    parser = argparse.ArgumentParser(description="MicroMVP navigation")
     parser.add_argument(
-        "--car-version", type=int, default=4, choices=[3, 4],
-        help="Car hardware version (default: 4)",
-    )
-    parser.add_argument(
-        "--camera", type=int, default=0,
-        help="Camera device index (default: 0)",
-    )
-    parser.add_argument(
-        "--serial-port", type=str, default="/dev/tty.usbmodem101",
-        help="Serial port for ESP-NOW bridge (default: /dev/tty.usbmodem31301)",
-    )
-    parser.add_argument(
-        "--warmup", type=int, default=30,
-        help="Warmup frames for workspace estimation (default: 30)",
-    )
-    parser.add_argument(
-        "--no-preview", action="store_true", default=False,
-        help="Disable camera preview window",
-    )
-    parser.add_argument(
-        "--max-speed", type=float, default=0.3,
-        help="Maximum robot speed [0-1] (default: 0.3)",
-    )
-    parser.add_argument(
-        "--port", type=int, default=8080,
-        help="Web server port (default: 8080)",
+        "--config", type=str, default="config/car_v4.yaml",
+        help="Deployment config describing your hardware (default: config/car_v4.yaml)",
     )
     parser.add_argument(
         "--timeout", type=float, default=10.0,
-        help="Workspace ready timeout in seconds (default: 10)",
+        help="Seconds to wait for the workspace to lock (default: 10)",
     )
     args = parser.parse_args()
 
-    # ---- 1. Build env config from preset + CLI overrides ----
-    base_config = v4_config if args.car_version == 4 else v3_config
-    config = dataclasses.replace(
-        base_config,
-        camera_device=args.camera,
-        serial_port=args.serial_port,
-        warmup_frames=args.warmup,
-        no_preview=args.no_preview,
-    )
+    # ---- 1. Load the one config that describes this setup ----
+    try:
+        cfg = load_config(args.config)
+    except ConfigError as exc:
+        print(f"[main] {exc}")
+        return
 
-    env = NewRealPushEnv(config)
+    env = NewRealPushEnv(cfg)
 
     # ---- 2. Start env and wait for workspace + car discovery ----
     print("[main] Starting environment …")
@@ -113,23 +86,21 @@ def main():
 
     # ---- 3. Create controllers (after workspace is ready) ----
     controllers = {
-        rid: NavigationController(
-            rid,
-            ws_config,
-            max_speed=args.max_speed,
-        )
+        rid: NavigationController.from_config(rid, ws_config, cfg)
         for rid in ws_config.car_id_list
     }
 
-    active_id = ws_config.car_id_list[0]
-
     # ---- 4. Create coordinator ----
-    coordinator = NavigationCoordinator(
-        ws_config,
-        controllers,
-        active_robot_id=active_id,
-        webserver_port=args.port,
-    )
+    coordinator = NavigationCoordinator.from_config(ws_config, controllers, cfg)
+    active_id = coordinator.active_robot_id
+
+    # Values the GUI needs to display, read from the same config.
+    max_speed = cfg.require("control.max_speed", float, who="navigation example")
+    web_port = cfg.require("navigation.webserver_port", int, who="navigation example")
+
+    # Anything in the config that nothing read is almost always a typo.
+    for field in cfg.unused_fields():
+        print(f"[main] warning: config field '{field}' was not used by anything")
 
     # ---- 5. Setup GUI ----
     gui_config = {
@@ -145,7 +116,7 @@ def main():
                 "type": "continuous_slider",
                 "label": "Robot Speed",
                 "range": [0.0, 1.0],
-                "default": args.max_speed,
+                "default": max_speed,
                 "callback_name": "set_robot_speed",
             },
             {"type": "label", "text": ""},
@@ -157,7 +128,7 @@ def main():
             },
             {"type": "label", "text": ""},
             {"type": "label", "text": "=== Web API ==="},
-            {"type": "label", "text": f"Port: {args.port}"},
+            {"type": "label", "text": f"Port: {web_port}"},
             {"type": "label", "text": "POST /setup_obstacle"},
             {"type": "label", "text": "POST /goto"},
             {"type": "label", "text": "POST /follow_path"},
@@ -235,13 +206,14 @@ def main():
     # ---- 8. Print instructions and run ----
     print()
     print("=" * 60)
-    print("NewRealPushEnv Navigation")
+    print("MicroMVP Navigation")
     print("=" * 60)
     print(f"  Workspace : {ws_config.width:.1f} × {ws_config.height:.1f} cm")
     print(f"  Cars      : {ws_config.car_id_list}")
     print(f"  Active    : {active_id}")
-    print(f"  Web API   : http://localhost:{args.port}")
-    print(f"  Max speed : {args.max_speed}")
+    print(f"  Web API   : http://localhost:{web_port}")
+    print(f"  Max speed : {max_speed}")
+    print(f"  Config    : {cfg.source}")
     print("=" * 60)
 
     gui.run()  # blocks until window closed

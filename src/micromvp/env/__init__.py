@@ -12,14 +12,11 @@ and applies wheel commands, without knowing anything about control logic.
 
 from .base import Environment
 from .sim_env import SimConfig, SimEnv
-from .new_real_push_env import NewRealPushEnv, NewRealPushConfig, v3_config, v4_config
+from .new_real_push_env import NewRealPushEnv
 
 __all__ = [
     "Environment",
     "SimConfig",
     "SimEnv",
     "NewRealPushEnv",
-    "NewRealPushConfig",
-    "v3_config",
-    "v4_config",
 ]
