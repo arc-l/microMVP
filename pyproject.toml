@@ -17,11 +17,10 @@ dependencies = [
   "opencv-contrib-python>=4.8",
   "pyserial>=3.5",
   "PyYAML>=6.0",
+  "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]
-# Camera calibration board rendering
-calibration = ["matplotlib>=3.8"]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

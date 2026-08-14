@@ -50,30 +50,9 @@ cd micromvp_v4
 pip install -e ".[dev]"
 ```
 
-That is five runtime dependencies — PyQt6, NumPy, OpenCV (the contrib
-build, for ArUco), pyserial, PyYAML — plus pytest from the `dev` extra.
-Drop `[dev]` if you do not want to run the tests.
-
-Check it worked:
-
-```bash
-pytest
-```
-
-```
-63 passed, 2 deselected
-```
-
-The two deselected tests need the RVG path planner, which is optional and
-installed separately — see [Path planning](#path-planning). Without it the
-system still runs, planning straight lines instead of routes around
-obstacles.
-
-One more extra, only needed if you are printing your own calibration board:
-
-```bash
-pip install -e ".[calibration]"   # adds matplotlib
-```
+The RVG path planner is optional and installed separately — see
+[Path planning](#path-planning). Without it the system still runs, planning
+straight lines instead of routes around obstacles.
 
 ---
 
