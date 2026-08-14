@@ -41,25 +41,48 @@ collected actions back.
 
 ## Install
 
+Python 3.12 or newer. Use a fresh environment — either works:
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+```
+
+```bash
+conda create -n micromvp python=3.12 && conda activate micromvp
+```
+
+Then:
+
 ```bash
 git clone <this repo>
 cd micromvp_v4
-pip install -e .
+pip install -e ".[dev]"
 ```
 
-Python 3.12+. Pulls in PyQt6, NumPy, OpenCV (contrib, for ArUco), pyserial
-and PyYAML.
+That is five runtime dependencies — PyQt6, NumPy, OpenCV (the contrib
+build, for ArUco), pyserial, PyYAML — plus pytest from the `dev` extra.
+Drop `[dev]` if you do not want to run the tests.
 
-Optional extras:
+Check it worked:
 
 ```bash
-pip install -e ".[calibration]"   # matplotlib, for rendering a calibration board
-pip install -e ".[dev]"           # pytest
+pytest
 ```
 
-The RVG path planner is optional and installed separately — see
-[Path planning](#path-planning). Without it the system still runs; it plans
-straight lines instead.
+```
+63 passed, 2 deselected
+```
+
+The two deselected tests need the RVG path planner, which is optional and
+installed separately — see [Path planning](#path-planning). Without it the
+system still runs, planning straight lines instead of routes around
+obstacles.
+
+One more extra, only needed if you are printing your own calibration board:
+
+```bash
+pip install -e ".[calibration]"   # adds matplotlib
+```
 
 ---
 
@@ -402,7 +425,7 @@ for focus — plain carpet or a bare table gives autofocus nothing to lock
 onto. Blurred frames detect no markers, and one frame without markers
 clears the accumulated window, so the count never reaches
 `workspace.lock_frames`. Put a sheet of white paper under the workspace, or
-use a camera whose focus you can fix.
+use another camera.
 
 If the picture is steady and sharp, the cause is something else.
 
