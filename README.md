@@ -396,34 +396,15 @@ If it moves the wrong way, set `actuation.invert_left_wheel` /
 The lock counter climbs, drops to zero, and repeats. Startup times out with
 `workspace not ready`.
 
-The usual cause is the camera hunting for focus. Contrast-detection
-autofocus moves the lens looking for a sharpness peak; on plain carpet or a
-bare table there is no peak to find, so it searches forever — sharp for
-half a second, blurred for half a second, over and over. Blurred frames
-detect no markers, and one frame without markers clears the accumulated
-window, so the count never reaches `workspace.lock_frames`.
+Look at the camera in Photo Booth, or any other preview, for a few seconds.
+If the picture keeps going soft and then sharp again, the camera is hunting
+for focus — plain carpet or a bare table gives autofocus nothing to lock
+onto. Blurred frames detect no markers, and one frame without markers
+clears the accumulated window, so the count never reaches
+`workspace.lock_frames`. Put a sheet of white paper under the workspace, or
+use a camera whose focus you can fix.
 
-Watch the preview for a couple of seconds and you will see it breathe in
-and out on a regular cycle.
-
-1. **Lock focus in the camera.** OpenCV cannot do this on macOS —
-   `CAP_PROP_AUTOFOCUS` fails to set. Use `uvc-util -I 0 -s auto-focus=0`
-   on macOS, `v4l2-ctl --set-ctrl=focus_automatic_continuous=0` on Linux,
-   or the camera vendor's own utility. Recalibrate afterwards; the focal
-   length has changed.
-2. **Give the autofocus some contrast.** A sheet of white paper under the
-   workspace is usually enough. This is a workaround — move the paper or
-   change the lighting and the hunting can return.
-
-### Distances are wrong
-
-Everything looks self-consistent on screen but the numbers are off. Check
-`car.marker_size_mm` and `obstacle.marker_size_mm` against the printed
-markers, measuring the black border only. A marker declared 30 mm that is
-really 40 mm puts the whole workspace 25% closer than it is.
-
-The system should agree with itself: if cars and obstacles disagree about
-where the floor is, one of the two marker descriptions is wrong.
+If the picture is steady and sharp, the cause is something else.
 
 ---
 
