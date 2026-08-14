@@ -41,19 +41,10 @@ collected actions back.
 
 ## Install
 
-Python 3.12 or newer. Use a fresh environment — either works:
-
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-```
+conda create -n micromvp python=3.12
+conda activate micromvp
 
-```bash
-conda create -n micromvp python=3.12 && conda activate micromvp
-```
-
-Then:
-
-```bash
 git clone <this repo>
 cd micromvp_v4
 pip install -e ".[dev]"
