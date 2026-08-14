@@ -1,1 +1,0 @@
-This is the pure pursuit version of path following car controller.
