@@ -135,10 +135,11 @@ Full API in [docs/navigation_api.md](docs/navigation_api.md).
 
 ## Concepts
 
-Three layers, each ignorant of the one above it. That is what lets the same
-controller drive a simulated robot and a real one.
+Three layers. A controller never talks to the camera or the radio directly,
+so the same controller code works whether it is driving a simulated robot
+or a real one.
 
-### Environment — where things are, and moving the wheels
+### Environment — reports poses, drives the wheels
 
 Owns the camera and the radio. It reports poses and accepts wheel commands,
 and knows nothing about goals or paths.
@@ -159,7 +160,7 @@ projects the camera's field of view onto that plane, and takes the largest
 rectangle inside it. Details in
 [src/micromvp/env/real_env/README.md](src/micromvp/env/real_env/README.md).
 
-### Controller — how one robot gets there
+### Controller — turns one robot's pose into wheel commands
 
 One instance per robot, holding that robot's state. Given an observation, it
 returns wheel commands.
@@ -198,12 +199,11 @@ class MyController(Controller):
         return self.calculate_action()
 ```
 
-### Coordinator — who does what
+### Coordinator — connects the environment to the controllers
 
-Sits between the environment and the controllers. It hands each controller
-its observation, collects the actions, and is where anything involving more
-than one robot lives — formations, task assignment, path planning. It also
-bridges to the GUI.
+Hands each controller its observation and collects the actions. Anything
+involving more than one robot lives here — formations, task assignment,
+path planning. It also bridges to the GUI.
 
 ```python
 actions = coordinator.process(observations)
