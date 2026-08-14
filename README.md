@@ -47,7 +47,7 @@ conda activate micromvp
 
 git clone <this repo>
 cd micromvp_v4
-pip install -e ".[dev]"
+pip install -e .
 ```
 
 The RVG path planner is optional and installed separately — see
