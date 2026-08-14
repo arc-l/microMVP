@@ -171,10 +171,11 @@ projects the camera's field of view onto that plane, and takes the largest
 rectangle inside it. Details in
 [src/micromvp/env/real_env/README.md](src/micromvp/env/real_env/README.md).
 
-### Controller — turns one robot's pose into wheel commands
+### Controller — low-level motion control for one robot
 
-One instance per robot, holding that robot's state. Given an observation, it
-returns wheel commands.
+One instance per robot. You give it a task — a path to follow, a heading to
+rotate to — and it keeps its own state while carrying that task out, one
+`step()` per observation.
 
 ```python
 controller = NavigationController.from_config(robot_id, ws_config, cfg)
@@ -210,11 +211,12 @@ class MyController(Controller):
         return self.calculate_action()
 ```
 
-### Coordinator — connects the environment to the controllers
+### Coordinator — coordination across robots
 
-Hands each controller its observation and collects the actions. Anything
-involving more than one robot lives here — formations, task assignment,
-path planning. It also bridges to the GUI.
+Processes the observations from the environment, hands each controller what
+it needs, and collects the actions back. Anything spanning more than one
+robot belongs here: collision avoidance, path planning, formations, task
+assignment. It is also what the GUI talks to.
 
 ```python
 actions = coordinator.process(observations)
