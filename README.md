@@ -65,46 +65,20 @@ straight lines instead.
 
 ## Quick start
 
-### 1. Find your gateway's serial port
+### 1. Connect the Xiao gateway
 
-The ESP-NOW gateway is a Xiao ESP32 board plugged into USB. Everything else
-depends on talking to it, so start here.
+Plug the gateway board into USB. `actuation.serial_port` is `auto` by
+default, so there is nothing to configure — the port is found at startup.
+
+To check which port it landed on:
 
 ```bash
 python -m hardware_test.find_ap
 ```
 
 ```
-Probing 1 port(s); this takes ~5s each.
-Sending zero-thrust frames only — nothing will move.
-
   /dev/cu.usbmodem101 ... GATEWAY  frame_ok=19 bad_ck=0 over 3s
-
-Gateway found on /dev/cu.usbmodem101
-  Set this in your config:  actuation.serial_port: /dev/cu.usbmodem101
 ```
-
-This does not guess from device names. It sends real frames and watches the
-gateway's own `[STAT]` counter climb, so a port that merely accepts bytes
-cannot be mistaken for the gateway.
-
-Nothing to find?
-
-- The device appears as `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on
-  Linux, `COM*` on Windows. Check with `ls /dev/tty*` before and after
-  plugging it in.
-- Close anything holding the port open — an Arduino IDE serial monitor will
-  block it.
-- Confirm the gateway firmware `xiao/xiao_ap_ESP_NOW.ino` is flashed.
-
-Put the reported path in `config/car_v4.yaml`:
-
-```yaml
-actuation:
-  serial_port: /dev/cu.usbmodem101
-```
-
-`auto` also works if you only ever have one gateway plugged in.
 
 ### 2. Check the wheels turn
 
@@ -399,6 +373,30 @@ more than it looks.
 ---
 
 ## Troubleshooting
+
+### The gateway is not found
+
+`python -m hardware_test.find_ap` probes every candidate port by sending
+real frames and watching the gateway's own `[STAT]` counter climb, so a
+device that merely accepts bytes cannot be mistaken for it. Nothing moves
+during the probe — the frames carry zero thrust.
+
+If it reports nothing:
+
+- The gateway shows up as `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on
+  Linux, `COM*` on Windows. Compare `ls /dev/tty*` before and after
+  plugging it in.
+- Close anything holding the port open; an Arduino IDE serial monitor will
+  block it.
+- Confirm `xiao/xiao_ap_ESP_NOW.ino` is flashed to the board.
+
+With more than one serial device attached, `auto` takes the first match and
+says so. Pin the right one in the config to remove the guesswork:
+
+```yaml
+actuation:
+  serial_port: /dev/cu.usbmodem101
+```
 
 ### The workspace never locks
 
