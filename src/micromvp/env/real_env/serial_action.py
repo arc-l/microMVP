@@ -1,7 +1,7 @@
 """
-Serial action sender for the Xiao ESP-NOW gateway protocol.
+Serial action sender for the Xiao AP protocol.
 
-Protocol on USB serial (PC -> Xiao AP Gateway):
+Protocol on USB serial (PC -> Xiao AP):
     0xAA 0x55 | level(1) | len(1=32) | payload(32) | checksum_xor(1)
 
 Protocol over ESP-NOW broadcast (handled by the AP firmware):
@@ -62,7 +62,7 @@ class SerialActionConfig:
 
 
 def candidate_serial_ports() -> List[str]:
-    """Device paths that could plausibly be the ESP-NOW gateway, best first."""
+    """Device paths that could plausibly be the AP, best first."""
     patterns = [
         "/dev/cu.usbmodem*",   # macOS, callout device (does not block on DCD)
         "/dev/ttyACM*",        # Linux, USB CDC
@@ -80,7 +80,7 @@ def resolve_serial_port(port: str) -> str:
     """Turn the configured port into a concrete device path.
 
     "auto" picks the first plausible device. That is a convenience for a
-    desk with one gateway plugged in; pin the path in the config once you
+    desk with one AP plugged in; pin the path in the config once you
     know it, and run `python -m hardware_test.find_ap` to confirm which
     device actually answers.
     """
@@ -91,7 +91,7 @@ def resolve_serial_port(port: str) -> str:
     if not candidates:
         raise RuntimeError(
             "actuation.serial_port is 'auto' but no serial device was found.\n"
-            "  Plug in the Xiao gateway, or set an explicit path in the config.\n"
+            "  Plug in the Xiao AP, or set an explicit path in the config.\n"
             "  Run `python -m hardware_test.find_ap` to list what is connected."
         )
     chosen = candidates[0]

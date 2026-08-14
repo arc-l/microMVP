@@ -65,9 +65,9 @@ straight lines instead.
 
 ## Quick start
 
-### 1. Connect the Xiao gateway
+### 1. Connect the Xiao AP
 
-Plug the gateway board into USB. `actuation.serial_port` is `auto` by
+Plug the AP board into USB. `actuation.serial_port` is `auto` by
 default, so there is nothing to configure — the port is found at startup.
 
 To check which port it landed on:
@@ -77,7 +77,7 @@ python -m hardware_test.find_ap
 ```
 
 ```
-  /dev/cu.usbmodem101 ... GATEWAY  frame_ok=19 bad_ck=0 over 3s
+  /dev/cu.usbmodem101 ... AP  frame_ok=19 bad_ck=0 over 3s
 ```
 
 ### 2. Check the wheels turn
@@ -370,16 +370,16 @@ and the intrinsics stop matching.
 
 ## Troubleshooting
 
-### The gateway is not found
+### The AP is not found
 
 `python -m hardware_test.find_ap` probes every candidate port by sending
-real frames and watching the gateway's own `[STAT]` counter climb, so a
+real frames and watching the AP's own `[STAT]` counter climb, so a
 device that merely accepts bytes cannot be mistaken for it. Nothing moves
 during the probe — the frames carry zero thrust.
 
 If it reports nothing:
 
-- The gateway shows up as `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on
+- The AP shows up as `/dev/cu.usbmodem*` on macOS, `/dev/ttyACM*` on
   Linux, `COM*` on Windows. Compare `ls /dev/tty*` before and after
   plugging it in.
 - Close anything holding the port open; an Arduino IDE serial monitor will
@@ -445,8 +445,8 @@ descriptions is wrong.
 vision system entirely. If the wheels still do not turn, the `CAR_ID` in
 the car's firmware does not match the id you are sending to.
 
-Note that ESP-NOW broadcasts are not acknowledged: the gateway reporting
-`send_ok` means the gateway sent the packet, not that any car heard it.
+Note that ESP-NOW broadcasts are not acknowledged: the AP reporting
+`send_ok` means the AP sent the packet, not that any car heard it.
 
 ### The web API will not start
 
@@ -468,7 +468,7 @@ src/micromvp/
   controller/      per-robot control algorithms
   coordinator/     multi-robot orchestration and the GUI bridge
   gui/             PyQt6 window, canvas, sidebar
-xiao/              ESP32 firmware — car and gateway
+xiao/              ESP32 firmware — car and AP
 tests/             pytest suite, no hardware needed
 docs/              web API, GUI spec, original design notes
 ```

@@ -1,5 +1,5 @@
 # =============================================================================
-# MicroMVP deployment config — V4 cars, overhead camera, ESP-NOW gateway.
+# MicroMVP deployment config — V4 cars, overhead camera, Xiao AP.
 #
 # One file describes one physical setup completely. Copy it, edit the numbers
 # to match your table, and you can reproduce the deployment exactly.
@@ -142,10 +142,10 @@ tracking:
   max_age_sec: 0.5
 
 # -----------------------------------------------------------------------------
-# Actuation — USB serial to the Xiao ESP-NOW gateway
+# Actuation — USB serial to the Xiao AP
 # -----------------------------------------------------------------------------
 actuation:
-  # "auto" scans the likely device paths and picks the gateway. Pin it to a
+  # "auto" scans the likely device paths and picks the AP. Pin it to a
   # specific path once you know it, e.g. /dev/cu.usbmodem101 (macOS),
   # /dev/ttyACM0 (Linux), COM3 (Windows).
   # `python -m hardware_test.find_ap` reports what is connected.

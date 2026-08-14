@@ -7,7 +7,7 @@ and applies wheel commands, without knowing anything about control logic.
 - Environment: Abstract base class
 - SimEnv: In-memory simulation, no hardware required
 - RealEnv: Real hardware — ArUco tracking with an adaptive workspace,
-  plus motor commands over the Xiao ESP-NOW serial gateway
+  plus motor commands over the Xiao AP
 """
 
 from .base import Environment

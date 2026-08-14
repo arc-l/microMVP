@@ -88,10 +88,10 @@ def main() -> int:
 
     if not sender.start():
         print("Could not open the serial port.")
-        print("  Run `python -m hardware_test.find_ap` to find the gateway.")
+        print("  Run `python -m hardware_test.find_ap` to find the AP.")
         return 1
 
-    # The gateway reboots when the port opens; let it come up first.
+    # The AP reboots when the port opens; let it come up first.
     time.sleep(2.0)
 
     print(f"Testing cars {cars} at thrust {speed}, {args.duration}s per motion.")
